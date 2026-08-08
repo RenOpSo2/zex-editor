@@ -1,0 +1,29 @@
+bagaimana agar zex stabil?
+
+apa bugnya?
+
+apa solusi atau patch yang bikin zex-0.3.0-beta lebih baik?
+
+solusinya?
+
+bagaimana?
+
+
+mungkin fix config autoindent? 
+
+atau mungkin syntax higlight tree-sitter?
+
+atau?
+
+tapi kalo aktifin mouse malah gabisa di scroll editornya?
+
+
+
+prompt:
+sebagai senior dev,
+
+fix bug pada code editor ini
+
+bug:
+ada bug pada config
+

@@ -1,0 +1,47 @@
+# Based on LLVM style with custom tweaks
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+IndentCaseLabels: false
+
+# Braces
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
+  AfterControlStatement: Never
+  AfterStruct: false
+  AfterEnum: false
+  BeforeElse: false
+  BeforeCatch: false
+
+# Spacing
+SpaceBeforeParens: ControlStatements
+SpaceAfterCStyleCast: true
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# Column limit
+ColumnLimit: 100
+
+# Pointer alignment
+PointerAlignment: Right
+AlignConsecutiveDeclarations: false
+
+# Comments
+AlignTrailingComments: false
+ReflowComments: true
+
+# Sorting
+SortIncludes: true
+IncludeBlocks: Preserve
+
+# Functions
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Macros
+IndentPPDirectives: AfterHash
