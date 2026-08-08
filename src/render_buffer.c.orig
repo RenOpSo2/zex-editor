@@ -14,7 +14,7 @@ void rb_clear(RenderBuffer *rb)
     rb->len = 0;
 }
 
-void rb_append(RenderBuffer *rb, const void* src, size_t size)
+void rb_append(RenderBuffer *rb, const void *src, size_t size)
 {
     if (!rb || !src || size == 0)
         return;
@@ -43,7 +43,7 @@ void rb_append_char(RenderBuffer *rb, char ch)
     rb->data[rb->len++] = ch;
 }
 
-void rb_append_str(RenderBuffer *rb, const char* str)
+void rb_append_str(RenderBuffer *rb, const char *str)
 {
     if (!str)
         return;

@@ -79,8 +79,7 @@ static const char* python_constants[] = {
     "self", "cls", "args", "kwargs", NULL
 };
 
-static bool is_keyword(const char* word, int len)
-{
+static bool is_keyword(const char* word, int len) {
     for (int i = 0; keywords[i] != NULL; i++) {
         size_t kw_len = strlen(keywords[i]);
         if (kw_len == (size_t)len && strncmp(word, keywords[i], len) == 0) {
@@ -90,8 +89,7 @@ static bool is_keyword(const char* word, int len)
     return false;
 }
 
-static bool is_type(const char* word, int len)
-{
+static bool is_type(const char* word, int len) {
     for (int i = 0; types[i] != NULL; i++) {
         size_t type_len = strlen(types[i]);
         if (type_len == (size_t)len && strncmp(word, types[i], len) == 0) {
@@ -101,8 +99,7 @@ static bool is_type(const char* word, int len)
     return false;
 }
 
-static bool is_constant(const char* word, int len)
-{
+static bool is_constant(const char* word, int len) {
     for (int i = 0; constants[i] != NULL; i++) {
         size_t const_len = strlen(constants[i]);
         if (const_len == (size_t)len && strncmp(word, constants[i], len) == 0) {
@@ -112,8 +109,7 @@ static bool is_constant(const char* word, int len)
     return false;
 }
 
-static bool is_python_keyword(const char* word, int len)
-{
+static bool is_python_keyword(const char* word, int len) {
     for (int i = 0; python_keywords[i] != NULL; i++) {
         size_t kw_len = strlen(python_keywords[i]);
         if (kw_len == (size_t)len && strncmp(word, python_keywords[i], len) == 0) {
@@ -123,8 +119,7 @@ static bool is_python_keyword(const char* word, int len)
     return false;
 }
 
-static bool is_python_type(const char* word, int len)
-{
+static bool is_python_type(const char* word, int len) {
     for (int i = 0; python_types[i] != NULL; i++) {
         size_t type_len = strlen(python_types[i]);
         if (type_len == (size_t)len && strncmp(word, python_types[i], len) == 0) {
@@ -134,8 +129,7 @@ static bool is_python_type(const char* word, int len)
     return false;
 }
 
-static bool is_python_constant(const char* word, int len)
-{
+static bool is_python_constant(const char* word, int len) {
     for (int i = 0; python_constants[i] != NULL; i++) {
         size_t const_len = strlen(python_constants[i]);
         if (const_len == (size_t)len && strncmp(word, python_constants[i], len) == 0) {
@@ -145,15 +139,13 @@ static bool is_python_constant(const char* word, int len)
     return false;
 }
 
-static bool is_operator(char c)
-{
-    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' ||
-           c == '=' || c == '&' || c == '|' || c == '^' || c == '~' ||
+static bool is_operator(char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || 
+           c == '=' || c == '&' || c == '|' || c == '^' || c == '~' || 
            c == '<' || c == '>' || c == '!' || c == '?' || c == ':';
 }
 
-static bool is_two_char_op(const char* s)
-{
+static bool is_two_char_op(const char* s) {
     return (s[0] == '+' && s[1] == '+') ||
            (s[0] == '-' && s[1] == '-') ||
            (s[0] == '<' && s[1] == '<') ||
@@ -175,8 +167,7 @@ static bool is_two_char_op(const char* s)
            (s[0] == '^' && s[1] == '=');
 }
 
-static void append_color(char** result, int* result_len, int* result_cap, const char* color)
-{
+static void append_color(char** result, int* result_len, int* result_cap, const char* color) {
     int color_len = strlen(color);
     while (*result_len + color_len >= *result_cap) {
         *result_cap *= 2;
@@ -186,8 +177,7 @@ static void append_color(char** result, int* result_len, int* result_cap, const 
     *result_len += color_len;
 }
 
-static void append_text(char** result, int* result_len, int* result_cap, const char* text, int text_len)
-{
+static void append_text(char** result, int* result_len, int* result_cap, const char* text, int text_len) {
     while (*result_len + text_len >= *result_cap) {
         *result_cap *= 2;
         *result = realloc(*result, *result_cap);
@@ -196,8 +186,7 @@ static void append_text(char** result, int* result_len, int* result_cap, const c
     *result_len += text_len;
 }
 
-static void append_char(char** result, int* result_len, int* result_cap, char c)
-{
+static void append_char(char** result, int* result_len, int* result_cap, char c) {
     while (*result_len + 1 >= *result_cap) {
         *result_cap *= 2;
         *result = realloc(*result, *result_cap);
@@ -206,8 +195,7 @@ static void append_char(char** result, int* result_len, int* result_cap, char c)
     *result_len += 1;
 }
 
-char* syntax_highlight_python_line(const char* line, uint32_t line_len)
-{
+char* syntax_highlight_python_line(const char* line, uint32_t line_len) {
     if (line_len == 0) {
         char* result = malloc(1);
         if (result) result[0] = '\0';
@@ -217,10 +205,10 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
     int result_cap = line_len * 4;
     char* result = malloc(result_cap);
     if (!result) return NULL;
-
+    
     int result_len = 0;
     int i = 0;
-
+    
     while (i < (int)line_len) {
         // Skip ANSI escape sequences
         if (line[i] == '\033') {
@@ -234,7 +222,7 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
                 continue;
             }
         }
-
+        
         // Check for Python comment (#)
         if (line[i] == '#') {
             append_color(&result, &result_len, &result_cap, COLOR_COMMENT);
@@ -243,19 +231,19 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
             i = line_len;
             continue;
         }
-
+        
         // Check for string literal (double quote)
         if (line[i] == '"') {
             append_color(&result, &result_len, &result_cap, COLOR_STRING);
             append_char(&result, &result_len, &result_cap, '"');
             i++;
-
+            
             // Check for triple quotes
-            if (i + 2 < (int)line_len && line[i] == '"' && line[i + 1] == '"') {
+            if (i + 2 < (int)line_len && line[i] == '"' && line[i+1] == '"') {
                 append_char(&result, &result_len, &result_cap, '"');
                 append_char(&result, &result_len, &result_cap, '"');
                 i += 2;
-                while (i < (int)line_len && !(line[i] == '"' && line[i + 1] == '"' && line[i + 2] == '"')) {
+                while (i < (int)line_len && !(line[i] == '"' && line[i+1] == '"' && line[i+2] == '"')) {
                     if (line[i] == '\\' && i + 1 < (int)line_len) {
                         append_char(&result, &result_len, &result_cap, line[i]);
                         i++;
@@ -292,19 +280,19 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for string literal (single quote)
         if (line[i] == '\'') {
             append_color(&result, &result_len, &result_cap, COLOR_STRING);
             append_char(&result, &result_len, &result_cap, '\'');
             i++;
-
+            
             // Check for triple quotes
-            if (i + 2 < (int)line_len && line[i] == '\'' && line[i + 1] == '\'') {
+            if (i + 2 < (int)line_len && line[i] == '\'' && line[i+1] == '\'') {
                 append_char(&result, &result_len, &result_cap, '\'');
                 append_char(&result, &result_len, &result_cap, '\'');
                 i += 2;
-                while (i < (int)line_len && !(line[i] == '\'' && line[i + 1] == '\'' && line[i + 2] == '\'')) {
+                while (i < (int)line_len && !(line[i] == '\'' && line[i+1] == '\'' && line[i+2] == '\'')) {
                     if (line[i] == '\\' && i + 1 < (int)line_len) {
                         append_char(&result, &result_len, &result_cap, line[i]);
                         i++;
@@ -341,16 +329,16 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for identifier
         if (isalpha(line[i]) || line[i] == '_') {
             int start = i;
             while (i < (int)line_len && (isalnum(line[i]) || line[i] == '_')) {
                 i++;
             }
-
+            
             int word_len = i - start;
-
+            
             // Check if it's a Python keyword
             if (is_python_keyword(line + start, word_len)) {
                 append_color(&result, &result_len, &result_cap, COLOR_KEYWORD);
@@ -385,23 +373,23 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
             }
             continue;
         }
-
+        
         // Check for number
-        if (isdigit(line[i]) || (line[i] == '.' && i + 1 < (int)line_len && isdigit(line[i + 1]))) {
+        if (isdigit(line[i]) || (line[i] == '.' && i + 1 < (int)line_len && isdigit(line[i+1]))) {
             int start = i;
             append_color(&result, &result_len, &result_cap, COLOR_NUMBER);
-
-            if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i + 1]) == 'x') {
+            
+            if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i+1]) == 'x') {
                 i += 2;
                 while (i < (int)line_len && (isxdigit(line[i]))) {
                     i++;
                 }
-            } else if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i + 1]) == 'b') {
+            } else if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i+1]) == 'b') {
                 i += 2;
                 while (i < (int)line_len && (line[i] == '0' || line[i] == '1')) {
                     i++;
                 }
-            } else if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i + 1]) == 'o') {
+            } else if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i+1]) == 'o') {
                 i += 2;
                 while (i < (int)line_len && (line[i] >= '0' && line[i] <= '7')) {
                     i++;
@@ -423,42 +411,41 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
                     i++;
                 }
             }
-
+            
             append_text(&result, &result_len, &result_cap, line + start, i - start);
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for operator
         if (is_operator(line[i])) {
             append_color(&result, &result_len, &result_cap, COLOR_OPERATOR);
-
+            
             if (i + 1 < (int)line_len && is_two_char_op(line + i)) {
                 append_char(&result, &result_len, &result_cap, line[i]);
-                append_char(&result, &result_len, &result_cap, line[i + 1]);
+                append_char(&result, &result_len, &result_cap, line[i+1]);
                 i += 2;
             } else {
                 append_char(&result, &result_len, &result_cap, line[i]);
                 i++;
             }
-
+            
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Default: append character as-is
         append_char(&result, &result_len, &result_cap, line[i]);
         i++;
     }
-
+    
     // Null-terminate
     append_char(&result, &result_len, &result_cap, '\0');
-
+    
     return result;
 }
 
-char* syntax_highlight_line(const char* line, uint32_t line_len)
-{
+char* syntax_highlight_line(const char* line, uint32_t line_len) {
     if (line_len == 0) {
         char* result = malloc(1);
         if (result) result[0] = '\0';
@@ -468,10 +455,10 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
     int result_cap = line_len * 4; // Estimate for color codes
     char* result = malloc(result_cap);
     if (!result) return NULL;
-
+    
     int result_len = 0;
     int i = 0;
-
+    
     while (i < (int)line_len) {
         // Skip ANSI escape sequences
         if (line[i] == '\033') {
@@ -485,16 +472,16 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
                 continue;
             }
         }
-
+        
         // Check for multi-line comment start
-        if (i + 1 < (int)line_len && line[i] == '/' && line[i + 1] == '*') {
+        if (i + 1 < (int)line_len && line[i] == '/' && line[i+1] == '*') {
             append_color(&result, &result_len, &result_cap, COLOR_COMMENT);
             append_char(&result, &result_len, &result_cap, '/');
             append_char(&result, &result_len, &result_cap, '*');
             i += 2;
-
+            
             while (i < (int)line_len) {
-                if (i + 1 < (int)line_len && line[i] == '*' && line[i + 1] == '/') {
+                if (i + 1 < (int)line_len && line[i] == '*' && line[i+1] == '/') {
                     append_char(&result, &result_len, &result_cap, '*');
                     append_char(&result, &result_len, &result_cap, '/');
                     i += 2;
@@ -506,16 +493,16 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for single-line comment
-        if (i + 1 < (int)line_len && line[i] == '/' && line[i + 1] == '/') {
+        if (i + 1 < (int)line_len && line[i] == '/' && line[i+1] == '/') {
             append_color(&result, &result_len, &result_cap, COLOR_COMMENT);
             append_text(&result, &result_len, &result_cap, line + i, line_len - i);
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             i = line_len;
             continue;
         }
-
+        
         // Check for preprocessor directive
         if (line[i] == '#') {
             append_color(&result, &result_len, &result_cap, COLOR_PREPROC);
@@ -526,13 +513,13 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for string literal
         if (line[i] == '"') {
             append_color(&result, &result_len, &result_cap, COLOR_STRING);
             append_char(&result, &result_len, &result_cap, '"');
             i++;
-
+            
             while (i < (int)line_len && line[i] != '"') {
                 if (line[i] == '\\' && i + 1 < (int)line_len) {
                     append_char(&result, &result_len, &result_cap, line[i]);
@@ -544,7 +531,7 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
                     i++;
                 }
             }
-
+            
             if (i < (int)line_len) {
                 append_char(&result, &result_len, &result_cap, '"');
                 i++;
@@ -552,13 +539,13 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for character literal
         if (line[i] == '\'') {
             append_color(&result, &result_len, &result_cap, COLOR_STRING);
             append_char(&result, &result_len, &result_cap, '\'');
             i++;
-
+            
             while (i < (int)line_len && line[i] != '\'') {
                 if (line[i] == '\\' && i + 1 < (int)line_len) {
                     append_char(&result, &result_len, &result_cap, line[i]);
@@ -570,7 +557,7 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
                     i++;
                 }
             }
-
+            
             if (i < (int)line_len) {
                 append_char(&result, &result_len, &result_cap, '\'');
                 i++;
@@ -578,16 +565,16 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for identifier
         if (isalpha(line[i]) || line[i] == '_') {
             int start = i;
             while (i < (int)line_len && (isalnum(line[i]) || line[i] == '_')) {
                 i++;
             }
-
+            
             int word_len = i - start;
-
+            
             // Check if it's a keyword
             if (is_keyword(line + start, word_len)) {
                 append_color(&result, &result_len, &result_cap, COLOR_KEYWORD);
@@ -622,13 +609,13 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
             }
             continue;
         }
-
+        
         // Check for number
-        if (isdigit(line[i]) || (line[i] == '.' && i + 1 < (int)line_len && isdigit(line[i + 1]))) {
+        if (isdigit(line[i]) || (line[i] == '.' && i + 1 < (int)line_len && isdigit(line[i+1]))) {
             int start = i;
             append_color(&result, &result_len, &result_cap, COLOR_NUMBER);
-
-            if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i + 1]) == 'x') {
+            
+            if (line[i] == '0' && i + 1 < (int)line_len && tolower(line[i+1]) == 'x') {
                 i += 2;
                 while (i < (int)line_len && (isxdigit(line[i]))) {
                     i++;
@@ -650,42 +637,41 @@ char* syntax_highlight_line(const char* line, uint32_t line_len)
                     i++;
                 }
             }
-
+            
             append_text(&result, &result_len, &result_cap, line + start, i - start);
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Check for operator
         if (is_operator(line[i])) {
             append_color(&result, &result_len, &result_cap, COLOR_OPERATOR);
-
+            
             if (i + 1 < (int)line_len && is_two_char_op(line + i)) {
                 append_char(&result, &result_len, &result_cap, line[i]);
-                append_char(&result, &result_len, &result_cap, line[i + 1]);
+                append_char(&result, &result_len, &result_cap, line[i+1]);
                 i += 2;
             } else {
                 append_char(&result, &result_len, &result_cap, line[i]);
                 i++;
             }
-
+            
             append_color(&result, &result_len, &result_cap, COLOR_RESET);
             continue;
         }
-
+        
         // Default: append character as-is
         append_char(&result, &result_len, &result_cap, line[i]);
         i++;
     }
-
+    
     // Null-terminate
     append_char(&result, &result_len, &result_cap, '\0');
-
+    
     return result;
 }
 
-char* syntax_highlight_chunk(const char* code, uint32_t code_len)
-{
+char* syntax_highlight_chunk(const char* code, uint32_t code_len) {
     // For chunks, we'll process line by line
     if (code_len == 0) {
         char* result = malloc(1);
@@ -696,10 +682,10 @@ char* syntax_highlight_chunk(const char* code, uint32_t code_len)
     int result_cap = code_len * 4;
     char* result = malloc(result_cap);
     if (!result) return NULL;
-
+    
     int result_len = 0;
     int line_start = 0;
-
+    
     for (int i = 0; i <= (int)code_len; i++) {
         if (i == (int)code_len || code[i] == '\n') {
             int line_len = i - line_start;
@@ -714,13 +700,12 @@ char* syntax_highlight_chunk(const char* code, uint32_t code_len)
             line_start = i + 1;
         }
     }
-
+    
     append_char(&result, &result_len, &result_cap, '\0');
     return result;
 }
 
-char* syntax_highlight_python_chunk(const char* code, uint32_t code_len)
-{
+char* syntax_highlight_python_chunk(const char* code, uint32_t code_len) {
     // For chunks, we'll process line by line
     if (code_len == 0) {
         char* result = malloc(1);
@@ -731,10 +716,10 @@ char* syntax_highlight_python_chunk(const char* code, uint32_t code_len)
     int result_cap = code_len * 4;
     char* result = malloc(result_cap);
     if (!result) return NULL;
-
+    
     int result_len = 0;
     int line_start = 0;
-
+    
     for (int i = 0; i <= (int)code_len; i++) {
         if (i == (int)code_len || code[i] == '\n') {
             int line_len = i - line_start;
@@ -749,56 +734,52 @@ char* syntax_highlight_python_chunk(const char* code, uint32_t code_len)
             line_start = i + 1;
         }
     }
-
+    
     append_char(&result, &result_len, &result_cap, '\0');
     return result;
 }
 
-int syntax_get_language(const char* filepath)
-{
+int syntax_get_language(const char* filepath) {
     if (!filepath) {
         return 0;
     }
-
+    
     const char* ext = strrchr(filepath, '.');
     if (!ext) {
         return 0;
     }
-
+    
     ext++; // Skip the dot
-
+    
     if (strcmp(ext, "c") == 0 || strcmp(ext, "h") == 0) {
         return 1; // C
     }
-
-    if (strcmp(ext, "cpp") == 0 || strcmp(ext, "cxx") == 0 ||
-            strcmp(ext, "cc") == 0 || strcmp(ext, "hpp") == 0 ||
-            strcmp(ext, "hxx") == 0) {
+    
+    if (strcmp(ext, "cpp") == 0 || strcmp(ext, "cxx") == 0 || 
+        strcmp(ext, "cc") == 0 || strcmp(ext, "hpp") == 0 || 
+        strcmp(ext, "hxx") == 0) {
         return 1; // C++
     }
-
+    
     if (strcmp(ext, "py") == 0 || strcmp(ext, "pyw") == 0) {
         return 2; // Python
     }
-
+    
     if (strcmp(ext, "python") == 0) {
         return 2; // Python
     }
-
+    
     return 0; // No highlighting
 }
 
-void syntax_init(void)
-{
+void syntax_init(void) {
     // No initialization needed for pure C implementation
 }
 
-void syntax_deinit(void)
-{
+void syntax_deinit(void) {
     // No cleanup needed for pure C implementation
 }
 
-int syntax_is_available(void)
-{
+int syntax_is_available(void) {
     return 1; // Always available in pure C implementation
 }

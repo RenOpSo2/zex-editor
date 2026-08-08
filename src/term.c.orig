@@ -28,20 +28,17 @@ struct termios {
 };
 
 
-uint32_t term_read(char* dst)
-{
+uint32_t term_read(char* dst) {
     return read(STDIN_FILENO, dst, term_capacity);
 }
 
 
-void term_update(struct term* term)
-{
+void term_update(struct term* term) {
     ioctl(STDIN_FILENO, TIOCGWINSZ, &term->ws);
 }
 
 
-void term_deinit()
-{
+void term_deinit() {
     /* always disable mouse tracking on exit */
     write(STDOUT_FILENO, MOUSE_OFF, sizeof(MOUSE_OFF) - 1);
 
@@ -54,8 +51,7 @@ void term_deinit()
 }
 
 
-void term_init(void)
-{
+void term_init(void) {
     struct termios term;
 
     /* get current terminal attributes */

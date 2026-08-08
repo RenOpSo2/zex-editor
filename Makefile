@@ -30,7 +30,7 @@ TEST_CONFIG_OBJS = $(BUILDDIR)/test_config.o $(filter-out $(BUILDDIR)/main.o, $(
 TEST_CONFIG_TARGET = $(BINDIR)/test_config
 
 # Phony targets
-.PHONY: all clean run format dirs test
+.PHONY: all clean run format format-astyle dirs test
 
 # Default target
 all: dirs $(TARGET)
@@ -110,6 +110,14 @@ format:
 	@clang-format -i $(SRCDIR)/*.c $(SRCDIR)/*.h
 	@echo "Format complete!"
 
+# Format source code with astyle (K&R style, 4-space indent)
+format-astyle:
+	@echo "Formatting source files with astyle (K&R, 4-space indent)..."
+	@astyle --style=kr --indent=spaces=4 --convert-tabs --pad-oper \
+	         --pad-header --unpad-paren --align-pointer=type \
+	         $(SRCDIR)/*.c $(SRCDIR)/*.h libmemory/*.c libmemory/*.h
+	@echo "Astyle format complete!"
+
 # Check formatting without changing files
 format-check:
 	@echo "Checking format..."
@@ -128,6 +136,7 @@ help:
 	@echo "  test         : Build and run undo/redo test"
 	@echo "  clean        : Remove build artifacts"
 	@echo "  format       : Format source with clang-format"
+	@echo "  format-astyle: Format source with astyle (K&R, 4-space indent)"
 	@echo "  format-check : Check formatting without changes"
 	@echo "  check        : Static analysis with cppcheck"
 	@echo "  help         : Show this help"

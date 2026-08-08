@@ -8,8 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
-void editor_init(struct global* global, const char* filepath)
-{
+void editor_init(struct global* global, const char* filepath) {
     term_init();
     draw_init();
     syntax_init();
@@ -23,7 +22,7 @@ void editor_init(struct global* global, const char* filepath)
     global->filepath[0] = '\0';
     global->undo_count = 0;
     global->redo_count = 0;
-
+    
     // Initialize search state
     global->search_active = false;
     global->search_query[0] = '\0';
@@ -43,16 +42,14 @@ void editor_init(struct global* global, const char* filepath)
     }
 }
 
-void editor_deinit(struct global* global)
-{
+void editor_deinit(struct global* global) {
     (void)global;
     draw_deinit();
     syntax_deinit();
     term_deinit();
 }
 
-enum result editor_update(struct global* global)
-{
+enum result editor_update(struct global* global) {
     if (input_update(global) == err) {
         return err;
     }

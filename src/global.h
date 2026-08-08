@@ -12,6 +12,9 @@
 
 #define PAGE_CAPACITY 4096
 #define UNDO_STACK_SIZE 100
+#define MAX_CONFIG_ENTRIES 32
+#define MAX_SEARCH_QUERY_LEN 256
+#define MAX_FILEPATH_LEN 256
 
 // Ctrl+key macros
 #define CTRL_KEY(k) ((k) & 0x1f)
@@ -25,7 +28,7 @@ enum action_type {
 
 struct action {
     enum action_type type;
-    char data[256];  // Store inserted/deleted text
+    char data[MAX_SEARCH_QUERY_LEN];  // Store inserted/deleted text
     uint32_t pos;    // Cursor position
     uint32_t len;    // Length of data
 };
@@ -62,7 +65,7 @@ struct global {
     struct paged_gap_buffer text;
     struct paged_gap_buffer clipboard;
     struct paged_gap_buffer msg;
-    char filepath[256];
+    char filepath[MAX_FILEPATH_LEN];
 
     // Selection: linear byte offsets into the logical content.
     // sel_anchor is fixed when selection starts; cursor end is computed live.
@@ -77,7 +80,7 @@ struct global {
 
     // Search state
     enum bool search_active;
-    char search_query[256];
+    char search_query[MAX_SEARCH_QUERY_LEN];
     uint32_t search_pos; // current match position
     uint32_t search_match_count; // number of matches found
 

@@ -3,8 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
-static struct page* page_new(Arena* arena)
-{
+static struct page* page_new(Arena* arena) {
     struct page* p = arena_cnew(arena, struct page);
     if (!p) return NULL; // Arena exhausted — let the caller decide what to do.
     p->gap_start = 0;
@@ -14,8 +13,7 @@ static struct page* page_new(Arena* arena)
     return p;
 }
 
-void pgb_init(struct paged_gap_buffer* pgb, Arena* arena)
-{
+void pgb_init(struct paged_gap_buffer* pgb, Arena* arena) {
     pgb->head = page_new(arena);
     // page_new only fails if the arena has no room for a single page (~4KB);
     // with the editor's 16MB arena this should never happen at startup, but
@@ -30,8 +28,7 @@ void pgb_init(struct paged_gap_buffer* pgb, Arena* arena)
     pgb->active_page = pgb->head;
 }
 
-static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
-{
+static void page_split(struct paged_gap_buffer* pgb, Arena* arena) {
     struct page* curr = pgb->active_page;
     struct page* new_page = page_new(arena);
     if (!new_page) return; // Arena exhausted — caller (pgb_insert) will drop the edit.
@@ -56,8 +53,7 @@ static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
     }
 }
 
-void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
-{
+void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena) {
     struct page* p = pgb->active_page;
     if (p->gap_start == p->gap_end) {
         page_split(pgb, arena);
@@ -71,8 +67,7 @@ void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
     p->data[p->gap_start++] = ch;
 }
 
-void pgb_delete(struct paged_gap_buffer* pgb)
-{
+void pgb_delete(struct paged_gap_buffer* pgb) {
     struct page* p = pgb->active_page;
     if (p->gap_start > 0) {
         p->gap_start--;
@@ -86,8 +81,7 @@ void pgb_delete(struct paged_gap_buffer* pgb)
     }
 }
 
-void pgb_clear(struct paged_gap_buffer* pgb)
-{
+void pgb_clear(struct paged_gap_buffer* pgb) {
     struct page* p = pgb->head;
     while (p) {
         p->gap_start = 0;
@@ -97,21 +91,18 @@ void pgb_clear(struct paged_gap_buffer* pgb)
     pgb->active_page = pgb->head;
 }
 
-void pgb_insert_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
-{
+void pgb_insert_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena) {
     for (uint32_t i = 0; src[i] != '\0'; i++) {
         pgb_insert(pgb, src[i], arena);
     }
 }
 
-void pgb_replace_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
-{
+void pgb_replace_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena) {
     pgb_clear(pgb);
     pgb_insert_str(pgb, src, arena);
 }
 
-void pgb_to_str(char* dst, size_t dst_size, struct paged_gap_buffer* pgb)
-{
+void pgb_to_str(char* dst, size_t dst_size, struct paged_gap_buffer* pgb) {
     uint32_t i = 0;
     struct page* p = pgb->head;
     while (p && i < dst_size - 1) {
@@ -122,8 +113,7 @@ void pgb_to_str(char* dst, size_t dst_size, struct paged_gap_buffer* pgb)
     dst[i] = '\0';
 }
 
-void pgb_move_left(struct paged_gap_buffer* pgb)
-{
+void pgb_move_left(struct paged_gap_buffer* pgb) {
     struct page* p = pgb->active_page;
     if (p->gap_start > 0) {
         p->gap_end--;
@@ -143,8 +133,7 @@ void pgb_move_left(struct paged_gap_buffer* pgb)
     }
 }
 
-void pgb_move_right(struct paged_gap_buffer* pgb)
-{
+void pgb_move_right(struct paged_gap_buffer* pgb) {
     struct page* p = pgb->active_page;
     if (p->gap_end < PAGE_CAPACITY) {
         p->data[p->gap_start++] = p->data[p->gap_end++];
@@ -162,8 +151,7 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
     }
 }
 
-void pgb_move_up(struct paged_gap_buffer* pgb)
-{
+void pgb_move_up(struct paged_gap_buffer* pgb) {
     uint32_t col = 0;
     while (1) {
         struct page* p = pgb->active_page;
@@ -202,8 +190,7 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
     }
 }
 
-void pgb_move_down(struct paged_gap_buffer* pgb)
-{
+void pgb_move_down(struct paged_gap_buffer* pgb) {
     uint32_t col = 0;
     while (1) {
         struct page* p = pgb->active_page;
@@ -243,8 +230,7 @@ void pgb_move_down(struct paged_gap_buffer* pgb)
 // --- Selection & clipboard helpers ---
 
 // Returns the cursor's current linear byte offset from the start of the buffer.
-uint32_t pgb_cursor_pos(struct paged_gap_buffer* pgb)
-{
+uint32_t pgb_cursor_pos(struct paged_gap_buffer* pgb) {
     uint32_t pos = 0;
     struct page* p = pgb->head;
     while (p) {
@@ -259,8 +245,7 @@ uint32_t pgb_cursor_pos(struct paged_gap_buffer* pgb)
 }
 
 // Move cursor to a specific linear byte offset.
-void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
-{
+void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target) {
     // Move to start first.
     while (pgb->active_page->prev) {
         pgb->active_page = pgb->active_page->prev;
@@ -281,8 +266,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 
 // Copy logical bytes [from, to) from src into dst clipboard.
 void pgb_copy_range(struct paged_gap_buffer* dst, struct paged_gap_buffer* src,
-                    uint32_t from, uint32_t to, Arena* arena)
-{
+                    uint32_t from, uint32_t to, Arena* arena) {
     pgb_clear(dst);
     if (from >= to) return;
 
@@ -303,8 +287,7 @@ void pgb_copy_range(struct paged_gap_buffer* dst, struct paged_gap_buffer* src,
 }
 
 // Delete logical bytes [from, to) from pgb.
-void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
-{
+void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to) {
     if (from >= to) return;
     pgb_move_to_pos(pgb, to);
     uint32_t count = to - from;
@@ -315,48 +298,45 @@ void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
 
 // --- Undo/redo functions ---
 
-void undo_save_insert(struct global* global, char ch, uint32_t pos)
-{
+void undo_save_insert(struct global* global, char ch, uint32_t pos) {
     if (global->undo_count >= UNDO_STACK_SIZE) return;
-
+    
     struct action* act = &global->undo_stack[global->undo_count];
     act->type = action_insert;
     act->data[0] = ch;
     act->len = 1;
     act->pos = pos;
     global->undo_count++;
-
+    
     // Clear redo stack on new action
     global->redo_count = 0;
 }
 
-void undo_save_delete(struct global* global, char ch, uint32_t pos)
-{
+void undo_save_delete(struct global* global, char ch, uint32_t pos) {
     if (global->undo_count >= UNDO_STACK_SIZE) return;
-
+    
     struct action* act = &global->undo_stack[global->undo_count];
     act->type = action_delete;
     act->data[0] = ch;
     act->len = 1;
     act->pos = pos;
     global->undo_count++;
-
+    
     // Clear redo stack on new action
     global->redo_count = 0;
 }
 
-void undo_perform(struct global* global)
-{
+void undo_perform(struct global* global) {
     if (global->undo_count == 0) return;
-
+    
     struct action* act = &global->undo_stack[global->undo_count - 1];
-
+    
     // Save to redo stack
     if (global->redo_count < UNDO_STACK_SIZE) {
         global->redo_stack[global->redo_count] = *act;
         global->redo_count++;
     }
-
+    
     // Perform undo
     if (act->type == action_insert) {
         // Undo insert = delete the character that was inserted
@@ -373,16 +353,15 @@ void undo_perform(struct global* global)
             pgb_insert(&global->text, act->data[i], &global->arena);
         }
     }
-
+    
     global->undo_count--;
 }
 
-void redo_perform(struct global* global)
-{
+void redo_perform(struct global* global) {
     if (global->redo_count == 0) return;
-
+    
     struct action* act = &global->redo_stack[global->redo_count - 1];
-
+    
     // Perform redo
     if (act->type == action_insert) {
         // Redo insert = insert the character back at original position
@@ -398,7 +377,7 @@ void redo_perform(struct global* global)
             pgb_delete(&global->text);
         }
     }
-
+    
     // Move action back to undo stack
     global->redo_count--;
     global->undo_count++;
@@ -406,8 +385,7 @@ void redo_perform(struct global* global)
 
 // --- Search functions ---
 
-void search_init(struct global* global)
-{
+void search_init(struct global* global) {
     global->search_active = false;
     global->search_query[0] = '\0';
     global->search_pos = 0;
@@ -415,23 +393,22 @@ void search_init(struct global* global)
 }
 
 // Find all occurrences of query in text, return first match position
-void search_find(struct global* global, const char* query)
-{
+void search_find(struct global* global, const char* query) {
     if (query[0] == '\0') {
         global->search_active = false;
         global->search_match_count = 0;
         return;
     }
-
+    
     strncpy(global->search_query, query, sizeof(global->search_query) - 1);
     global->search_query[sizeof(global->search_query) - 1] = '\0';
-
+    
     char buffer[buf_capacity];
     pgb_to_str(buffer, sizeof(buffer), &global->text);
-
+    
     uint32_t count = 0;
-    uint32_t first_match = (uint32_t) -1;
-
+    uint32_t first_match = (uint32_t)-1;
+    
     char* ptr = buffer;
     while ((ptr = strstr(ptr, query)) != NULL) {
         uint32_t pos = ptr - buffer;
@@ -441,29 +418,28 @@ void search_find(struct global* global, const char* query)
         count++;
         ptr++; // Move past this match
     }
-
+    
     global->search_match_count = count;
     global->search_active = (count > 0);
     global->search_pos = first_match;
-
-    if (first_match != (uint32_t) -1) {
+    
+    if (first_match != (uint32_t)-1) {
         pgb_move_to_pos(&global->text, first_match);
     }
 }
 
 // Move to next search match
-void search_next(struct global* global)
-{
+void search_next(struct global* global) {
     if (!global->search_active || global->search_query[0] == '\0') return;
-
+    
     char buffer[buf_capacity];
     pgb_to_str(buffer, sizeof(buffer), &global->text);
-
+    
     char* query = global->search_query;
     uint32_t query_len = strlen(query);
     uint32_t total_size = strlen(buffer);
-
-    if (global->search_pos == (uint32_t) -1) {
+    
+    if (global->search_pos == (uint32_t)-1) {
         char* ptr = strstr(buffer, query);
         if (ptr) {
             global->search_pos = ptr - buffer;
@@ -471,13 +447,13 @@ void search_next(struct global* global)
         }
         return;
     }
-
+    
     uint32_t start_pos = global->search_pos + query_len;
     char* ptr = NULL;
     if (start_pos < total_size) {
         ptr = strstr(buffer + start_pos, query);
     }
-
+    
     if (ptr) {
         global->search_pos = ptr - buffer;
         pgb_move_to_pos(&global->text, global->search_pos);
@@ -491,30 +467,29 @@ void search_next(struct global* global)
 }
 
 // Move to previous search match
-void search_prev(struct global* global)
-{
+void search_prev(struct global* global) {
     if (!global->search_active || global->search_query[0] == '\0') return;
-
+    
     char buffer[buf_capacity];
     pgb_to_str(buffer, sizeof(buffer), &global->text);
-
+    
     char* query = global->search_query;
     uint32_t current_pos = global->search_pos;
-    uint32_t best_match = (uint32_t) -1;
-    uint32_t last_match = (uint32_t) -1;
-
+    uint32_t best_match = (uint32_t)-1;
+    uint32_t last_match = (uint32_t)-1;
+    
     char* ptr = buffer;
     while ((ptr = strstr(ptr, query)) != NULL) {
         uint32_t pos = ptr - buffer;
         last_match = pos;
-        if (current_pos != (uint32_t) -1 && pos < current_pos) {
+        if (current_pos != (uint32_t)-1 && pos < current_pos) {
             best_match = pos;
         }
         ptr++;
     }
-
-    if (current_pos == (uint32_t) -1 || best_match == (uint32_t) -1) {
-        if (last_match != (uint32_t) -1) {
+    
+    if (current_pos == (uint32_t)-1 || best_match == (uint32_t)-1) {
+        if (last_match != (uint32_t)-1) {
             global->search_pos = last_match;
             pgb_move_to_pos(&global->text, last_match);
         }

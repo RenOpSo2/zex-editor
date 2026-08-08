@@ -9,14 +9,12 @@
  * @param alignment Must be power of 2
  * @return Aligned pointer value
  */
-static inline uintptr_t align_up(uintptr_t ptr, size_t alignment)
-{
+static inline uintptr_t align_up(uintptr_t ptr, size_t alignment) {
     uintptr_t mask = (uintptr_t)alignment - 1;
     return (ptr + mask) & ~mask;
 }
 
-Arena arena_init(void* buffer, size_t size)
-{
+Arena arena_init(void *buffer, size_t size) {
     return (Arena) {
         .buf = (char*)buffer,
         .offset = 0,
@@ -24,8 +22,7 @@ Arena arena_init(void* buffer, size_t size)
     };
 }
 
-void* arena_alloc(Arena *arena, size_t size, size_t alignment)
-{
+void *arena_alloc(Arena *arena, size_t size, size_t alignment) {
     // Zero-size allocations return NULL
     if (size == 0) return NULL;
 
@@ -47,36 +44,31 @@ void* arena_alloc(Arena *arena, size_t size, size_t alignment)
     return (void*)aligned;
 }
 
-void* arena_calloc(Arena *arena, size_t count, size_t size, size_t alignment)
-{
+void *arena_calloc(Arena *arena, size_t count, size_t size, size_t alignment) {
     size_t total = count * size;
-    void* ptr = arena_alloc(arena, total, alignment);
+    void *ptr = arena_alloc(arena, total, alignment);
     if (ptr) {
         memset(ptr, 0, total);
     }
     return ptr;
 }
 
-void arena_reset(Arena *arena)
-{
+void arena_reset(Arena *arena) {
     arena->offset = 0;  // Instant free - O(1)
 }
 
-void* arena_alloc_default(Arena *arena, size_t size)
-{
+void *arena_alloc_default(Arena *arena, size_t size) {
     return arena_alloc(arena, size, ARENA_DEFAULT_ALIGNMENT);
 }
 
-char* arena_strdup(Arena *arena, const char* str)
-{
+char *arena_strdup(Arena *arena, const char *str) {
     size_t len = strlen(str);
     return arena_strndup(arena, str, len);
 }
 
-char* arena_strndup(Arena *arena, const char* str, size_t len)
-{
+char *arena_strndup(Arena *arena, const char *str, size_t len) {
     // +1 for null terminator, alignment=1 since chars don't need alignment
-    char* dup = (char*)arena_alloc(arena, len + 1, 1);
+    char *dup = (char*)arena_alloc(arena, len + 1, 1);
     if (dup) {
         memcpy(dup, str, len);
         dup[len] = '\0';

@@ -20,7 +20,7 @@ extern "C" {
  * - Request handlers (scoped HTTP request memory)
  */
 typedef struct Arena {
-    char* buf;        /**< Underlying memory buffer */
+    char *buf;        /**< Underlying memory buffer */
     size_t offset;    /**< Current allocation position */
     size_t capacity;  /**< Total buffer size */
 } Arena;
@@ -35,7 +35,7 @@ typedef struct Arena {
  *   static char mem[1024*1024];  // 1MB
  *   Arena arena = arena_init(mem, sizeof(mem));
  */
-Arena arena_init(void* buffer, size_t size);
+Arena arena_init(void *buffer, size_t size);
 
 /**
  * @brief Allocate aligned memory from arena
@@ -47,7 +47,7 @@ Arena arena_init(void* buffer, size_t size);
  * Performance: O(1) - just bumps offset
  * Overhead: 0-15 bytes padding per allocation for alignment
  */
-void* arena_alloc(Arena *arena, size_t size, size_t alignment);
+void *arena_alloc(Arena *arena, size_t size, size_t alignment);
 
 /**
  * @brief Allocate and zero-initialize memory
@@ -57,7 +57,7 @@ void* arena_alloc(Arena *arena, size_t size, size_t alignment);
  * @param alignment Memory alignment
  * @return Zeroed pointer or NULL
  */
-void* arena_calloc(Arena *arena, size_t count, size_t size, size_t alignment);
+void *arena_calloc(Arena *arena, size_t count, size_t size, size_t alignment);
 
 /**
  * @brief Reset arena to empty state (O(1))
@@ -80,7 +80,7 @@ void arena_reset(Arena *arena);
  *
  * Allocates strlen(str) + 1 bytes (includes null terminator)
  */
-char* arena_strdup(Arena *arena, const char* str);
+char *arena_strdup(Arena *arena, const char *str);
 
 /**
  * @brief Duplicate string with explicit length
@@ -92,7 +92,7 @@ char* arena_strdup(Arena *arena, const char* str);
  * Useful for:
  *   char *word = arena_strndup(arena, line + start, end - start);
  */
-char* arena_strndup(Arena *arena, const char* str, size_t len);
+char *arena_strndup(Arena *arena, const char *str, size_t len);
 
 /**
  * @brief Allocate with default 16-byte alignment
@@ -102,7 +102,7 @@ char* arena_strndup(Arena *arena, const char* str, size_t len);
  *
  * Good default for general purpose allocations
  */
-void* arena_alloc_default(Arena *arena, size_t size);
+void *arena_alloc_default(Arena *arena, size_t size);
 
 // ============ CONVENIENCE MACROS ============
 

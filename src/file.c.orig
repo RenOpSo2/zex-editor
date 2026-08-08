@@ -17,8 +17,7 @@
  *
  * Addresses: NX-001, NX-002
  */
-static enum result file_validate_path(const char* path, char resolved[PATH_MAX])
-{
+static enum result file_validate_path(const char* path, char resolved[PATH_MAX]) {
     char* rp = realpath(path, resolved);
     if (!rp) return err;
 
@@ -43,8 +42,7 @@ static enum result file_validate_path(const char* path, char resolved[PATH_MAX])
  *
  * Addresses: NX-001, NX-003
  */
-enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* arena)
-{
+enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* arena) {
     char resolved[PATH_MAX];
     if (file_validate_path(path, resolved) != ok) return err;
 
@@ -91,8 +89,7 @@ enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* are
  *
  * Addresses: NX-002
  */
-enum result file_write(const char* path, struct paged_gap_buffer* pgb)
-{
+enum result file_write(const char* path, struct paged_gap_buffer* pgb) {
     /* Build a temp path adjacent to the target file. */
     char tmp_path[PATH_MAX];
     int n = snprintf(tmp_path, sizeof(tmp_path), "%s.XXXXXX", path);
@@ -105,35 +102,24 @@ enum result file_write(const char* path, struct paged_gap_buffer* pgb)
     while (p) {
         if (p->gap_start > 0) {
             if (write(fd, p->data, p->gap_start) != (ssize_t)p->gap_start) {
-                close(fd);
-                unlink(tmp_path);
-                return err;
+                close(fd); unlink(tmp_path); return err;
             }
         }
         uint32_t right = PAGE_CAPACITY - p->gap_end;
         if (right > 0) {
             if (write(fd, p->data + p->gap_end, right) != (ssize_t)right) {
-                close(fd);
-                unlink(tmp_path);
-                return err;
+                close(fd); unlink(tmp_path); return err;
             }
         }
         p = p->next;
     }
 
     /* Flush to disk before exposing the file under the real name. */
-    if (fsync(fd) == -1) {
-        close(fd);
-        unlink(tmp_path);
-        return err;
-    }
+    if (fsync(fd) == -1) { close(fd); unlink(tmp_path); return err; }
     close(fd);
 
     /* Atomic promotion: replaces the target only after a successful write. */
-    if (rename(tmp_path, path) == -1) {
-        unlink(tmp_path);
-        return err;
-    }
+    if (rename(tmp_path, path) == -1) { unlink(tmp_path); return err; }
 
     return ok;
 }

@@ -3,13 +3,13 @@
 #include "arena.h"
 
 typedef struct Line {
-    char* text;
+    char *text;
     size_t length;
     size_t capacity;
 } Line;
 
 typedef struct TextBuffer {
-    Line* lines;
+    Line *lines;
     size_t num_lines;
     size_t capacity;
     Arena arena;  // All allocations come from this
@@ -18,8 +18,7 @@ typedef struct TextBuffer {
 // Static buffer for the arena (adjust size as needed)
 #define ARENA_SIZE (1024 * 1024)  // 1MB
 
-int main()
-{
+int main() {
     // Allocate static memory for the arena
     static char arena_memory[ARENA_SIZE];
     Arena arena = arena_init(arena_memory, ARENA_SIZE);

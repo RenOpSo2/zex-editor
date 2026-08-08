@@ -29,20 +29,19 @@ static time_t last_config_mtime = 0;
 static int config_loading = 0;
 
 // Default config values setup
-void config_init(void)
-{
+void config_init(void) {
     config_entry_count = 0;
-
+    
     // Set default tabsize
     strncpy(config_entries[0].key, "tabsize", sizeof(config_entries[0].key) - 1);
     config_entries[0].type = CONFIG_TYPE_NUMBER;
     config_entries[0].number_val = 4.0;
-
+    
     // Set default mouse
     strncpy(config_entries[1].key, "mouse", sizeof(config_entries[1].key) - 1);
     config_entries[1].type = CONFIG_TYPE_BOOL;
     config_entries[1].bool_val = 1; // true
-
+    
     // Set default show_line_numbers
     strncpy(config_entries[2].key, "show_line_numbers", sizeof(config_entries[2].key) - 1);
     config_entries[2].type = CONFIG_TYPE_BOOL;
@@ -57,8 +56,7 @@ void config_init(void)
 }
 
 // Find entry index by key
-static int find_entry(const char* key)
-{
+static int find_entry(const char* key) {
     for (int i = 0; i < config_entry_count; i++) {
         if (strcmp(config_entries[i].key, key) == 0) {
             return i;
@@ -68,8 +66,7 @@ static int find_entry(const char* key)
 }
 
 // Helper to skip whitespace
-static const char* skip_ws(const char* s)
-{
+static const char* skip_ws(const char* s) {
     while (*s && isspace((unsigned char)*s)) {
         s++;
     }
@@ -77,12 +74,11 @@ static const char* skip_ws(const char* s)
 }
 
 // Simple JSON parser
-static void parse_json(const char* json_str)
-{
+static void parse_json(const char* json_str) {
     const char* p = skip_ws(json_str);
     if (*p != '{') return;
     p++; // skip '{'
-
+    
     while (*p && *p != '}') {
         p = skip_ws(p);
         if (*p == '}') break;
@@ -92,7 +88,7 @@ static void parse_json(const char* json_str)
             continue;
         }
         p++; // skip quote
-
+        
         // Parse key
         char key[64] = "";
         int key_len = 0;
@@ -101,12 +97,12 @@ static void parse_json(const char* json_str)
         }
         key[key_len] = '\0';
         if (*p == '"') p++;
-
+        
         p = skip_ws(p);
         if (*p != ':') continue;
         p++; // skip ':'
         p = skip_ws(p);
-
+        
         // Parse value
         if (*p == '"') {
             p++; // skip quote
@@ -117,7 +113,7 @@ static void parse_json(const char* json_str)
             }
             val_str[val_len] = '\0';
             if (*p == '"') p++;
-
+            
             // Set value
             config_set_string(key, val_str);
         } else if (strncmp(p, "true", 4) == 0) {
@@ -138,7 +134,7 @@ static void parse_json(const char* json_str)
             // Unknown/unsupported token, skip
             p++;
         }
-
+        
         p = skip_ws(p);
         if (*p == ',') {
             p++; // skip comma
@@ -147,17 +143,16 @@ static void parse_json(const char* json_str)
 }
 
 // Write/update config file
-static void write_config_file(void)
-{
+static void write_config_file(void) {
     if (config_loading) return;
     if (active_config_path[0] == '\0') {
         // Default to ./zex.json if none active
         strncpy(active_config_path, "./zex.json", sizeof(active_config_path) - 1);
     }
-
+    
     FILE* f = fopen(active_config_path, "w");
     if (!f) return;
-
+    
     fprintf(f, "{\n");
     for (int i = 0; i < config_entry_count; i++) {
         fprintf(f, "  \"%s\": ", config_entries[i].key);
@@ -176,7 +171,7 @@ static void write_config_file(void)
     }
     fprintf(f, "}\n");
     fclose(f);
-
+    
     // Update mtime so we don't trigger self-reload
     struct stat st;
     if (stat(active_config_path, &st) == 0) {
@@ -185,30 +180,29 @@ static void write_config_file(void)
 }
 
 // Load config helper from file
-static int load_config_file(const char* path)
-{
+static int load_config_file(const char* path) {
     FILE* f = fopen(path, "r");
     if (!f) return 0;
-
+    
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-
+    
     char* buf = malloc(size + 1);
     if (!buf) {
         fclose(f);
         return 0;
     }
-
+    
     size_t read_bytes = fread(buf, 1, size, f);
     buf[read_bytes] = '\0';
     fclose(f);
-
+    
     config_loading = 1;
     parse_json(buf);
     config_loading = 0;
     free(buf);
-
+    
     strncpy(active_config_path, path, sizeof(active_config_path) - 1);
     struct stat st;
     if (stat(path, &st) == 0) {
@@ -218,8 +212,7 @@ static int load_config_file(const char* path)
 }
 
 // Validate schemas
-int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
-{
+int config_validate(const char* key, const char* raw_val, SchemaError* err_out) {
     if (strcmp(key, "tabsize") == 0) {
         // must be a positive integer
         for (int i = 0; raw_val[i] != '\0'; i++) {
@@ -241,7 +234,7 @@ int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
         }
     } else if (strcmp(key, "mouse") == 0 || strcmp(key, "show_line_numbers") == 0 || strcmp(key, "auto_indent") == 0) {
         if (strcmp(raw_val, "true") != 0 && strcmp(raw_val, "false") != 0 &&
-                strcmp(raw_val, "1") != 0 && strcmp(raw_val, "0") != 0) {
+            strcmp(raw_val, "1") != 0 && strcmp(raw_val, "0") != 0) {
             if (err_out) {
                 strncpy(err_out->key, key, sizeof(err_out->key) - 1);
                 strncpy(err_out->error_msg, "value must be boolean (true/false or 1/0)", sizeof(err_out->error_msg) - 1);
@@ -252,12 +245,11 @@ int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
     return 1;
 }
 
-void config_load(int argc, char* argv[])
-{
+void config_load(int argc, char* argv[]) {
     config_loading = 1;
     // 1. Initialise defaults (already done, but call config_init just in case)
     config_init();
-
+    
     // 2. Load ~/.zexrc or ./zex.json
     int loaded = 0;
     // Check local ./zex.json first
@@ -276,13 +268,13 @@ void config_load(int argc, char* argv[])
             }
         }
     }
-
+    
     // 3. Load CLI arguments e.g., --tabsize 4 or --mouse false
     for (int i = 1; i < argc - 1; i++) {
         if (strncmp(argv[i], "--", 2) == 0) {
             const char* key = argv[i] + 2;
             const char* val = argv[i + 1];
-
+            
             // Validate value
             SchemaError err;
             if (config_validate(key, val, &err)) {
@@ -301,8 +293,7 @@ void config_load(int argc, char* argv[])
     config_loading = 0;
 }
 
-double config_get_number(const char* key, double default_val)
-{
+double config_get_number(const char* key, double default_val) {
     int idx = find_entry(key);
     if (idx != -1 && config_entries[idx].type == CONFIG_TYPE_NUMBER) {
         return config_entries[idx].number_val;
@@ -310,8 +301,7 @@ double config_get_number(const char* key, double default_val)
     return default_val;
 }
 
-int config_get_bool(const char* key, int default_val)
-{
+int config_get_bool(const char* key, int default_val) {
     int idx = find_entry(key);
     if (idx != -1 && config_entries[idx].type == CONFIG_TYPE_BOOL) {
         return config_entries[idx].bool_val;
@@ -319,8 +309,7 @@ int config_get_bool(const char* key, int default_val)
     return default_val;
 }
 
-const char* config_get_string(const char* key, const char* default_val)
-{
+const char* config_get_string(const char* key, const char* default_val) {
     int idx = find_entry(key);
     if (idx != -1 && config_entries[idx].type == CONFIG_TYPE_STRING) {
         return config_entries[idx].string_val;
@@ -328,8 +317,7 @@ const char* config_get_string(const char* key, const char* default_val)
     return default_val;
 }
 
-void config_set_number(const char* key, double val)
-{
+void config_set_number(const char* key, double val) {
     int idx = find_entry(key);
     if (idx == -1) {
         if (config_entry_count < MAX_CONFIG_ENTRIES) {
@@ -344,8 +332,7 @@ void config_set_number(const char* key, double val)
     write_config_file();
 }
 
-void config_set_bool(const char* key, int val)
-{
+void config_set_bool(const char* key, int val) {
     int idx = find_entry(key);
     if (idx == -1) {
         if (config_entry_count < MAX_CONFIG_ENTRIES) {
@@ -360,8 +347,7 @@ void config_set_bool(const char* key, int val)
     write_config_file();
 }
 
-void config_set_string(const char* key, const char* val)
-{
+void config_set_string(const char* key, const char* val) {
     int idx = find_entry(key);
     if (idx == -1) {
         if (config_entry_count < MAX_CONFIG_ENTRIES) {
@@ -376,16 +362,14 @@ void config_set_string(const char* key, const char* val)
     write_config_file();
 }
 
-void config_set_filepath(const char* path)
-{
+void config_set_filepath(const char* path) {
     strncpy(active_config_path, path, sizeof(active_config_path) - 1);
     active_config_path[sizeof(active_config_path) - 1] = '\0';
 }
 
-void config_watch(struct global* global)
-{
+void config_watch(struct global* global) {
     if (active_config_path[0] == '\0') return;
-
+    
     struct stat st;
     if (stat(active_config_path, &st) == 0) {
         if (st.st_mtime != last_config_mtime) {
