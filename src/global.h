@@ -83,6 +83,7 @@ struct global {
     char search_query[MAX_SEARCH_QUERY_LEN];
     uint32_t search_pos; // current match position
     uint32_t search_match_count; // number of matches found
+    uint32_t search_query_len;
 
     Arena arena;
 };

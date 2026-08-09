@@ -331,9 +331,14 @@ void test_search_performance() {
     }
     
     benchmark_end(&b);
+    double elapsed_ms = ((double)(b.end - b.start)) / CLOCKS_PER_SEC * 1000.0;
     printf(ANSI_COLOR_GREEN "  Match count: %u" ANSI_COLOR_RESET "\n", global.search_match_count);
-    
-    printf(ANSI_COLOR_GREEN "  ✓ Search performance test passed" ANSI_COLOR_RESET "\n");
+
+    if (global.search_match_count == 10000 && elapsed_ms < 150.0) {
+        printf(ANSI_COLOR_GREEN "  ✓ Search performance test passed" ANSI_COLOR_RESET "\n");
+    } else {
+        printf(ANSI_COLOR_RED "  ✗ Search performance test failed (expected 10000 matches, <150ms)" ANSI_COLOR_RESET "\n");
+    }
 }
 
 int main() {

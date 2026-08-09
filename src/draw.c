@@ -136,7 +136,7 @@ static void draw_text(const struct paged_gap_buffer* pgb, uint32_t size_y, const
     for (uint32_t i = 0; full_buffer[i] != '\0'; i++) {
         if (full_buffer[i] == '\n') total_lines++;
     }
-    if (full_buffer[0] != '\0' && full_buffer[strlen(full_buffer) - 1] != '\n') {
+    if (buffer_len != 0 && full_buffer[buffer_len - 1] != '\n') {
         total_lines++; // Last line without newline
     }
 

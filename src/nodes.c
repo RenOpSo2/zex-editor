@@ -2,6 +2,7 @@
 #include "global.h"
 #include <string.h>
 #include <unistd.h>
+#include <stddef.h>
 
 static struct page* page_new(Arena* arena)
 {
@@ -439,25 +440,43 @@ void search_init(struct global* global)
     global->search_query[0] = '\0';
     global->search_pos = 0;
     global->search_match_count = 0;
+    global->search_query_len = 0;
 }
 
-// Helper: Count all matches and return first match position
-static uint32_t count_matches(const char* buffer, const char* query, uint32_t* match_count)
+/* Stream the logical gap-buffer through KMP.  This avoids flattening the
+ * document (and therefore avoids a 64K truncation and hot-path copies). */
+static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
+                            uint32_t qlen, uint32_t start, uint32_t stop,
+                            enum bool want_last, uint32_t* count)
 {
-    uint32_t first_match = (uint32_t) -1;
-    *match_count = 0;
-    
-    char* ptr = (char*)buffer;
-    while ((ptr = strstr(ptr, query)) != NULL) {
-        uint32_t pos = ptr - buffer;
-        if (*match_count == 0) {
-            first_match = pos;
-        }
-        (*match_count)++;
-        ptr++; // Move past this match
+    uint32_t pi[MAX_SEARCH_QUERY_LEN], j = 0, pos = 0, found = (uint32_t)-1;
+    for (uint32_t i = 1; i < qlen; i++) {
+        while (j && q[i] != q[j]) j = pi[j - 1];
+        if (q[i] == q[j]) j++;
+        pi[i] = j;
     }
-    
-    return first_match;
+    for (struct page* p = pgb->head; p; p = p->next) {
+        uint32_t parts[2] = {p->gap_start, PAGE_CAPACITY};
+        uint32_t begins[2] = {0, p->gap_end};
+        for (int part = 0; part < 2; part++) {
+            uint32_t end = parts[part], b = begins[part];
+            if (part == 1 && p->gap_end == PAGE_CAPACITY) continue;
+            for (uint32_t k = b; k < end; k++, pos++) {
+                unsigned char c = (unsigned char)p->data[k];
+                while (j && c != (unsigned char)q[j]) j = pi[j - 1];
+                if (c == (unsigned char)q[j]) j++;
+                if (j == qlen) {
+                    uint32_t at = pos + 1 - qlen;
+                    if (at >= start && at < stop) {
+                        if (count) (*count)++;
+                        if (found == (uint32_t)-1 || want_last) found = at;
+                    }
+                    j = pi[j - 1];
+                }
+            }
+        }
+    }
+    return found;
 }
 
 // Find all occurrences of query in text, return first match position
@@ -466,16 +485,17 @@ void search_find(struct global* global, const char* query)
     if (query[0] == '\0') {
         global->search_active = false;
         global->search_match_count = 0;
+        global->search_query_len = 0;
         return;
     }
 
     strncpy(global->search_query, query, sizeof(global->search_query) - 1);
     global->search_query[sizeof(global->search_query) - 1] = '\0';
-
-    char buffer[buf_capacity];
-    pgb_to_str(buffer, sizeof(buffer), &global->text);
-
-    uint32_t first_match = count_matches(buffer, query, &global->search_match_count);
+    global->search_query_len = (uint32_t)strlen(global->search_query);
+    global->search_match_count = 0;
+    uint32_t first_match = search_scan(&global->text, global->search_query,
+                                       global->search_query_len, 0, UINT32_MAX,
+                                       false, &global->search_match_count);
     
     global->search_active = (global->search_match_count > 0);
     global->search_pos = first_match;
@@ -485,61 +505,13 @@ void search_find(struct global* global, const char* query)
     }
 }
 
-// Helper: Find next match starting from position
-static uint32_t find_next_match(const char* buffer, const char* query, uint32_t start_pos)
-{
-    uint32_t total_size = strlen(buffer);
-    
-    if (start_pos < total_size) {
-        char* ptr = strstr(buffer + start_pos, query);
-        if (ptr) {
-            return ptr - buffer;
-        }
-    }
-    
-    // Wrap around to beginning
-    char* ptr = strstr(buffer, query);
-    if (ptr) {
-        return ptr - buffer;
-    }
-    
-    return (uint32_t) -1;
-}
-
-// Helper: Find previous match before position
-static uint32_t find_prev_match(const char* buffer, const char* query, uint32_t current_pos)
-{
-    uint32_t best_match = (uint32_t) -1;
-    uint32_t last_match = (uint32_t) -1;
-    
-    char* ptr = (char*)buffer;
-    while ((ptr = strstr(ptr, query)) != NULL) {
-        uint32_t pos = ptr - buffer;
-        last_match = pos;
-        if (current_pos != (uint32_t) -1 && pos < current_pos) {
-            best_match = pos;
-        }
-        ptr++;
-    }
-    
-    // If no match before current, wrap to last match
-    if (current_pos == (uint32_t) -1 || best_match == (uint32_t) -1) {
-        return last_match;
-    }
-    
-    return best_match;
-}
-
 // Move to next search match
 void search_next(struct global* global)
 {
     if (!global->search_active || global->search_query[0] == '\0') return;
 
-    char buffer[buf_capacity];
-    pgb_to_str(buffer, sizeof(buffer), &global->text);
-
     char* query = global->search_query;
-    uint32_t query_len = strlen(query);
+    uint32_t query_len = global->search_query_len;
     
     uint32_t start_pos;
     if (global->search_pos == (uint32_t) -1) {
@@ -548,7 +520,8 @@ void search_next(struct global* global)
         start_pos = global->search_pos + query_len;
     }
     
-    uint32_t next_pos = find_next_match(buffer, query, start_pos);
+    uint32_t next_pos = search_scan(&global->text, query, query_len, start_pos, UINT32_MAX, false, NULL);
+    if (next_pos == (uint32_t)-1) next_pos = search_scan(&global->text, query, query_len, 0, start_pos, false, NULL);
     if (next_pos != (uint32_t) -1) {
         global->search_pos = next_pos;
         pgb_move_to_pos(&global->text, next_pos);
@@ -560,11 +533,9 @@ void search_prev(struct global* global)
 {
     if (!global->search_active || global->search_query[0] == '\0') return;
 
-    char buffer[buf_capacity];
-    pgb_to_str(buffer, sizeof(buffer), &global->text);
-
     char* query = global->search_query;
-    uint32_t prev_pos = find_prev_match(buffer, query, global->search_pos);
+    uint32_t prev_pos = search_scan(&global->text, query, global->search_query_len, 0, global->search_pos, true, NULL);
+    if (prev_pos == (uint32_t)-1) prev_pos = search_scan(&global->text, query, global->search_query_len, global->search_pos, UINT32_MAX, true, NULL);
     
     if (prev_pos != (uint32_t) -1) {
         global->search_pos = prev_pos;

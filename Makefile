@@ -1,6 +1,7 @@
 # Compiler & Flags
 CC        = gcc
-CFLAGS = -Wall -Wextra -Wpedantic -g -O0 -std=gnu99
+CFLAGS ?= -Wall -Wextra -Wpedantic -O2 -std=gnu99
+.DEFAULT_GOAL := all
 
 # Directories
 SRCDIR    = src
@@ -38,7 +39,11 @@ TEST_EDGE_OBJS = $(BUILDDIR)/tests/edge_case_test.o $(filter-out $(BUILDDIR)/mai
 TEST_EDGE_TARGET = $(BINDIR)/test_edge
 
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge bench-search
+
+bench-search: dirs
+	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
+	@$(BINDIR)/bench_search
 
 # Default target
 all: dirs $(TARGET)
