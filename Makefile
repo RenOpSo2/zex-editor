@@ -14,7 +14,7 @@ TARGET    = $(BINDIR)/zex
 SRCS      = $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c)) libmemory/arena.c
 OBJS      = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c))) \
             $(BUILDDIR)/libmemory/arena.o
-DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/test_undo.d
+DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/test_undo.d $(BUILDDIR)/test_0.2.0.d $(BUILDDIR)/test_config.d $(BUILDDIR)/tests/stress_test.d $(BUILDDIR)/tests/edge_case_test.d
 
 # Test targets
 TEST_UNDO_SRCS = test_undo.c
@@ -29,8 +29,16 @@ TEST_CONFIG_SRCS = test_config.c
 TEST_CONFIG_OBJS = $(BUILDDIR)/test_config.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 TEST_CONFIG_TARGET = $(BINDIR)/test_config
 
+TEST_STRESS_SRCS = tests/stress_test.c
+TEST_STRESS_OBJS = $(BUILDDIR)/tests/stress_test.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+TEST_STRESS_TARGET = $(BINDIR)/test_stress
+
+TEST_EDGE_SRCS = tests/edge_case_test.c
+TEST_EDGE_OBJS = $(BUILDDIR)/tests/edge_case_test.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+TEST_EDGE_TARGET = $(BINDIR)/test_edge
+
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge
 
 # Default target
 all: dirs $(TARGET)
@@ -63,6 +71,18 @@ $(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJS)
 	@$(CC) $(CFLAGS) $(TEST_CONFIG_OBJS) -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
+# Build stress test
+$(TEST_STRESS_TARGET): $(TEST_STRESS_OBJS)
+	@echo "Linking stress test..."
+	@$(CC) $(CFLAGS) $(TEST_STRESS_OBJS) -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+# Build edge case test
+$(TEST_EDGE_TARGET): $(TEST_EDGE_OBJS)
+	@echo "Linking edge case test..."
+	@$(CC) $(CFLAGS) $(TEST_EDGE_OBJS) -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
 # Compile test objects
 $(BUILDDIR)/test_undo.o: test_undo.c
 	@mkdir -p $(dir $@)
@@ -75,6 +95,16 @@ $(BUILDDIR)/test_0.2.0.o: test_0.2.0.c
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILDDIR)/test_config.o: test_config.c
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILDDIR)/tests/stress_test.o: tests/stress_test.c
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILDDIR)/tests/edge_case_test.o: tests/edge_case_test.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -133,7 +163,9 @@ help:
 	@echo "Available targets:"
 	@echo "  all          : Build the project (default)"
 	@echo "  run          : Build and run"
-	@echo "  test         : Build and run undo/redo test"
+	@echo "  test         : Build and run all tests"
+	@echo "  test-stress  : Build and run stress test only"
+	@echo "  test-edge    : Build and run edge case test only"
 	@echo "  clean        : Remove build artifacts"
 	@echo "  format       : Format source with clang-format"
 	@echo "  format-astyle: Format source with astyle (K&R, 4-space indent)"
@@ -141,11 +173,24 @@ help:
 	@echo "  check        : Static analysis with cppcheck"
 	@echo "  help         : Show this help"
 
+# Individual test targets
+test-stress: dirs $(TEST_STRESS_TARGET)
+	@echo "Running stress test..."
+	@$(BINDIR)/test_stress
+
+test-edge: dirs $(TEST_EDGE_TARGET)
+	@echo "Running edge case test..."
+	@$(BINDIR)/test_edge
+
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET)
 	@echo "Running test_undo..."
 	@$(BINDIR)/test_undo
 	@echo "Running test_0.2.0..."
 	@$(BINDIR)/test_0.2.0
 	@echo "Running test_config..."
 	@$(BINDIR)/test_config
+	@echo "Running test_stress..."
+	@$(BINDIR)/test_stress
+	@echo "Running test_edge..."
+	@$(BINDIR)/test_edge
