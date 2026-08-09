@@ -110,7 +110,7 @@ void pgb_replace_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena
     pgb_insert_str(pgb, src, arena);
 }
 
-void pgb_to_str(char* dst, size_t dst_size, struct paged_gap_buffer* pgb)
+void pgb_to_str(char* dst, size_t dst_size, const struct paged_gap_buffer* pgb)
 {
     uint32_t i = 0;
     struct page* p = pgb->head;
@@ -162,7 +162,8 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
     }
 }
 
-void pgb_move_up(struct paged_gap_buffer* pgb)
+// Helper: Find current column position (tab-unaware)
+static uint32_t get_current_column(struct paged_gap_buffer* pgb)
 {
     uint32_t col = 0;
     while (1) {
@@ -176,15 +177,12 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
         }
         col++;
     }
-    if (pgb->active_page->gap_start == 0 && !pgb->active_page->prev) {
-        while (col > 0) {
-            pgb_move_right(pgb);
-            col--;
-        }
-        return;
-    }
-    pgb_move_left(pgb);
-    uint32_t prev_line_len = 0;
+    return col;
+}
+
+// Helper: Move to start of current line
+static void move_to_line_start(struct paged_gap_buffer* pgb)
+{
     while (1) {
         struct page* p = pgb->active_page;
         if (p->gap_start == 0 && !p->prev) break;
@@ -194,8 +192,47 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
             pgb_move_right(pgb);
             break;
         }
-        prev_line_len++;
     }
+}
+
+// Helper: Get length of current line
+static uint32_t get_line_length(struct paged_gap_buffer* pgb)
+{
+    uint32_t len = 0;
+    while (1) {
+        struct page* p = pgb->active_page;
+        if (p->gap_end == PAGE_CAPACITY && !p->next) break;
+        pgb_move_right(pgb);
+        p = pgb->active_page;
+        if (p->data[p->gap_start - 1] == '\n') {
+            pgb_move_left(pgb);
+            break;
+        }
+        len++;
+    }
+    return len;
+}
+
+void pgb_move_up(struct paged_gap_buffer* pgb)
+{
+    uint32_t col = get_current_column(pgb);
+    
+    // If already at first line, restore position and return
+    if (pgb->active_page->gap_start == 0 && !pgb->active_page->prev) {
+        for (uint32_t i = 0; i < col; i++) {
+            pgb_move_right(pgb);
+        }
+        return;
+    }
+    
+    // Move to previous line
+    move_to_line_start(pgb);
+    pgb_move_left(pgb);
+    
+    // Get previous line length
+    uint32_t prev_line_len = get_line_length(pgb);
+    
+    // Move to target column
     uint32_t target = col < prev_line_len ? col : prev_line_len;
     for (uint32_t i = 0; i < target; i++) {
         pgb_move_right(pgb);
@@ -204,21 +241,14 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
 
 void pgb_move_down(struct paged_gap_buffer* pgb)
 {
-    uint32_t col = 0;
-    while (1) {
-        struct page* p = pgb->active_page;
-        if (p->gap_start == 0 && !p->prev) break;
-        pgb_move_left(pgb);
-        p = pgb->active_page;
-        if (p->data[p->gap_start] == '\n') {
-            pgb_move_right(pgb);
-            break;
-        }
-        col++;
-    }
+    uint32_t col = get_current_column(pgb);
+    
+    // Restore position to start of line
     for (uint32_t i = 0; i < col; i++) {
         pgb_move_right(pgb);
     }
+    
+    // Move to next line
     while (1) {
         struct page* p = pgb->active_page;
         if (p->gap_end == PAGE_CAPACITY && !p->next) return;
@@ -228,22 +258,19 @@ void pgb_move_down(struct paged_gap_buffer* pgb)
             break;
         }
     }
-    for (uint32_t i = 0; i < col; i++) {
-        struct page* p = pgb->active_page;
-        if (p->gap_end == PAGE_CAPACITY && !p->next) break;
+    
+    // Get next line length and move to target column
+    uint32_t next_line_len = get_line_length(pgb);
+    uint32_t target = col < next_line_len ? col : next_line_len;
+    for (uint32_t i = 0; i < target; i++) {
         pgb_move_right(pgb);
-        p = pgb->active_page;
-        if (p->data[p->gap_start - 1] == '\n') {
-            pgb_move_left(pgb);
-            break;
-        }
     }
 }
 
 // --- Selection & clipboard helpers ---
 
 // Returns the cursor's current linear byte offset from the start of the buffer.
-uint32_t pgb_cursor_pos(struct paged_gap_buffer* pgb)
+uint32_t pgb_cursor_pos(const struct paged_gap_buffer* pgb)
 {
     uint32_t pos = 0;
     struct page* p = pgb->head;
@@ -280,7 +307,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 }
 
 // Copy logical bytes [from, to) from src into dst clipboard.
-void pgb_copy_range(struct paged_gap_buffer* dst, struct paged_gap_buffer* src,
+void pgb_copy_range(struct paged_gap_buffer* dst, const struct paged_gap_buffer* src,
                     uint32_t from, uint32_t to, Arena* arena)
 {
     pgb_clear(dst);
@@ -315,34 +342,34 @@ void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
 
 // --- Undo/redo functions ---
 
-void undo_save_insert(struct global* global, char ch, uint32_t pos)
+// Helper: Save action to undo stack
+static void undo_save_action(struct global* global, enum action_type type, const char* data, uint32_t len, uint32_t pos)
 {
     if (global->undo_count >= UNDO_STACK_SIZE) return;
 
     struct action* act = &global->undo_stack[global->undo_count];
-    act->type = action_insert;
-    act->data[0] = ch;
-    act->len = 1;
+    act->type = type;
+    act->len = len;
     act->pos = pos;
+    
+    // Copy data (up to MAX_SEARCH_QUERY_LEN)
+    uint32_t copy_len = len < MAX_SEARCH_QUERY_LEN ? len : MAX_SEARCH_QUERY_LEN;
+    for (uint32_t i = 0; i < copy_len; i++) {
+        act->data[i] = data[i];
+    }
+    
     global->undo_count++;
+    global->redo_count = 0; // Clear redo stack on new action
+}
 
-    // Clear redo stack on new action
-    global->redo_count = 0;
+void undo_save_insert(struct global* global, char ch, uint32_t pos)
+{
+    undo_save_action(global, action_insert, &ch, 1, pos);
 }
 
 void undo_save_delete(struct global* global, char ch, uint32_t pos)
 {
-    if (global->undo_count >= UNDO_STACK_SIZE) return;
-
-    struct action* act = &global->undo_stack[global->undo_count];
-    act->type = action_delete;
-    act->data[0] = ch;
-    act->len = 1;
-    act->pos = pos;
-    global->undo_count++;
-
-    // Clear redo stack on new action
-    global->redo_count = 0;
+    undo_save_action(global, action_delete, &ch, 1, pos);
 }
 
 void undo_perform(struct global* global)
@@ -414,6 +441,25 @@ void search_init(struct global* global)
     global->search_match_count = 0;
 }
 
+// Helper: Count all matches and return first match position
+static uint32_t count_matches(const char* buffer, const char* query, uint32_t* match_count)
+{
+    uint32_t first_match = (uint32_t) -1;
+    *match_count = 0;
+    
+    char* ptr = (char*)buffer;
+    while ((ptr = strstr(ptr, query)) != NULL) {
+        uint32_t pos = ptr - buffer;
+        if (*match_count == 0) {
+            first_match = pos;
+        }
+        (*match_count)++;
+        ptr++; // Move past this match
+    }
+    
+    return first_match;
+}
+
 // Find all occurrences of query in text, return first match position
 void search_find(struct global* global, const char* query)
 {
@@ -429,26 +475,59 @@ void search_find(struct global* global, const char* query)
     char buffer[buf_capacity];
     pgb_to_str(buffer, sizeof(buffer), &global->text);
 
-    uint32_t count = 0;
-    uint32_t first_match = (uint32_t) -1;
-
-    char* ptr = buffer;
-    while ((ptr = strstr(ptr, query)) != NULL) {
-        uint32_t pos = ptr - buffer;
-        if (count == 0) {
-            first_match = pos;
-        }
-        count++;
-        ptr++; // Move past this match
-    }
-
-    global->search_match_count = count;
-    global->search_active = (count > 0);
+    uint32_t first_match = count_matches(buffer, query, &global->search_match_count);
+    
+    global->search_active = (global->search_match_count > 0);
     global->search_pos = first_match;
 
     if (first_match != (uint32_t) -1) {
         pgb_move_to_pos(&global->text, first_match);
     }
+}
+
+// Helper: Find next match starting from position
+static uint32_t find_next_match(const char* buffer, const char* query, uint32_t start_pos)
+{
+    uint32_t total_size = strlen(buffer);
+    
+    if (start_pos < total_size) {
+        char* ptr = strstr(buffer + start_pos, query);
+        if (ptr) {
+            return ptr - buffer;
+        }
+    }
+    
+    // Wrap around to beginning
+    char* ptr = strstr(buffer, query);
+    if (ptr) {
+        return ptr - buffer;
+    }
+    
+    return (uint32_t) -1;
+}
+
+// Helper: Find previous match before position
+static uint32_t find_prev_match(const char* buffer, const char* query, uint32_t current_pos)
+{
+    uint32_t best_match = (uint32_t) -1;
+    uint32_t last_match = (uint32_t) -1;
+    
+    char* ptr = (char*)buffer;
+    while ((ptr = strstr(ptr, query)) != NULL) {
+        uint32_t pos = ptr - buffer;
+        last_match = pos;
+        if (current_pos != (uint32_t) -1 && pos < current_pos) {
+            best_match = pos;
+        }
+        ptr++;
+    }
+    
+    // If no match before current, wrap to last match
+    if (current_pos == (uint32_t) -1 || best_match == (uint32_t) -1) {
+        return last_match;
+    }
+    
+    return best_match;
 }
 
 // Move to next search match
@@ -461,32 +540,18 @@ void search_next(struct global* global)
 
     char* query = global->search_query;
     uint32_t query_len = strlen(query);
-    uint32_t total_size = strlen(buffer);
-
+    
+    uint32_t start_pos;
     if (global->search_pos == (uint32_t) -1) {
-        char* ptr = strstr(buffer, query);
-        if (ptr) {
-            global->search_pos = ptr - buffer;
-            pgb_move_to_pos(&global->text, global->search_pos);
-        }
-        return;
-    }
-
-    uint32_t start_pos = global->search_pos + query_len;
-    char* ptr = NULL;
-    if (start_pos < total_size) {
-        ptr = strstr(buffer + start_pos, query);
-    }
-
-    if (ptr) {
-        global->search_pos = ptr - buffer;
-        pgb_move_to_pos(&global->text, global->search_pos);
+        start_pos = 0;
     } else {
-        ptr = strstr(buffer, query);
-        if (ptr) {
-            global->search_pos = ptr - buffer;
-            pgb_move_to_pos(&global->text, global->search_pos);
-        }
+        start_pos = global->search_pos + query_len;
+    }
+    
+    uint32_t next_pos = find_next_match(buffer, query, start_pos);
+    if (next_pos != (uint32_t) -1) {
+        global->search_pos = next_pos;
+        pgb_move_to_pos(&global->text, next_pos);
     }
 }
 
@@ -499,27 +564,10 @@ void search_prev(struct global* global)
     pgb_to_str(buffer, sizeof(buffer), &global->text);
 
     char* query = global->search_query;
-    uint32_t current_pos = global->search_pos;
-    uint32_t best_match = (uint32_t) -1;
-    uint32_t last_match = (uint32_t) -1;
-
-    char* ptr = buffer;
-    while ((ptr = strstr(ptr, query)) != NULL) {
-        uint32_t pos = ptr - buffer;
-        last_match = pos;
-        if (current_pos != (uint32_t) -1 && pos < current_pos) {
-            best_match = pos;
-        }
-        ptr++;
-    }
-
-    if (current_pos == (uint32_t) -1 || best_match == (uint32_t) -1) {
-        if (last_match != (uint32_t) -1) {
-            global->search_pos = last_match;
-            pgb_move_to_pos(&global->text, last_match);
-        }
-    } else {
-        global->search_pos = best_match;
-        pgb_move_to_pos(&global->text, best_match);
+    uint32_t prev_pos = find_prev_match(buffer, query, global->search_pos);
+    
+    if (prev_pos != (uint32_t) -1) {
+        global->search_pos = prev_pos;
+        pgb_move_to_pos(&global->text, prev_pos);
     }
 }

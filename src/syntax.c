@@ -79,70 +79,46 @@ static const char* python_constants[] = {
     "self", "cls", "args", "kwargs", NULL
 };
 
-static bool is_keyword(const char* word, int len)
+// Generic helper to check if word matches any string in array
+static bool matches_word_list(const char* word, int len, const char* const* list)
 {
-    for (int i = 0; keywords[i] != NULL; i++) {
-        size_t kw_len = strlen(keywords[i]);
-        if (kw_len == (size_t)len && strncmp(word, keywords[i], len) == 0) {
+    for (int i = 0; list[i] != NULL; i++) {
+        size_t word_len = strlen(list[i]);
+        if (word_len == (size_t)len && strncmp(word, list[i], len) == 0) {
             return true;
         }
     }
     return false;
+}
+
+static bool is_keyword(const char* word, int len)
+{
+    return matches_word_list(word, len, keywords);
 }
 
 static bool is_type(const char* word, int len)
 {
-    for (int i = 0; types[i] != NULL; i++) {
-        size_t type_len = strlen(types[i]);
-        if (type_len == (size_t)len && strncmp(word, types[i], len) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return matches_word_list(word, len, types);
 }
 
 static bool is_constant(const char* word, int len)
 {
-    for (int i = 0; constants[i] != NULL; i++) {
-        size_t const_len = strlen(constants[i]);
-        if (const_len == (size_t)len && strncmp(word, constants[i], len) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return matches_word_list(word, len, constants);
 }
 
 static bool is_python_keyword(const char* word, int len)
 {
-    for (int i = 0; python_keywords[i] != NULL; i++) {
-        size_t kw_len = strlen(python_keywords[i]);
-        if (kw_len == (size_t)len && strncmp(word, python_keywords[i], len) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return matches_word_list(word, len, python_keywords);
 }
 
 static bool is_python_type(const char* word, int len)
 {
-    for (int i = 0; python_types[i] != NULL; i++) {
-        size_t type_len = strlen(python_types[i]);
-        if (type_len == (size_t)len && strncmp(word, python_types[i], len) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return matches_word_list(word, len, python_types);
 }
 
 static bool is_python_constant(const char* word, int len)
 {
-    for (int i = 0; python_constants[i] != NULL; i++) {
-        size_t const_len = strlen(python_constants[i]);
-        if (const_len == (size_t)len && strncmp(word, python_constants[i], len) == 0) {
-            return true;
-        }
-    }
-    return false;
+    return matches_word_list(word, len, python_constants);
 }
 
 static bool is_operator(char c)

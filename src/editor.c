@@ -8,6 +8,30 @@
 #include <string.h>
 #include <unistd.h>
 
+static void init_search_state(struct global* global)
+{
+    global->search_active = false;
+    global->search_query[0] = '\0';
+    global->search_pos = 0;
+    global->search_match_count = 0;
+}
+
+static void init_undo_state(struct global* global)
+{
+    global->undo_count = 0;
+    global->redo_count = 0;
+}
+
+static void safe_copy_filepath(char* dst, const char* src, size_t dst_size)
+{
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+    strncpy(dst, src, dst_size - 1);
+    dst[dst_size - 1] = '\0';
+}
+
 void editor_init(struct global* global, const char* filepath)
 {
     term_init();
@@ -21,18 +45,11 @@ void editor_init(struct global* global, const char* filepath)
     pgb_init(&global->msg, &global->arena);
 
     global->filepath[0] = '\0';
-    global->undo_count = 0;
-    global->redo_count = 0;
-
-    // Initialize search state
-    global->search_active = false;
-    global->search_query[0] = '\0';
-    global->search_pos = 0;
-    global->search_match_count = 0;
+    init_undo_state(global);
+    init_search_state(global);
 
     if (filepath) {
-        strncpy(global->filepath, filepath, sizeof(global->filepath) - 1);
-        global->filepath[sizeof(global->filepath) - 1] = '\0';
+        safe_copy_filepath(global->filepath, filepath, sizeof(global->filepath));
         if (access(global->filepath, F_OK) == 0) {
             if (file_read(&global->text, global->filepath, &global->arena) != ok) {
                 pgb_replace_str(&global->msg, "Could not open file.", &global->arena);

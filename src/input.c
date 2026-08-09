@@ -162,6 +162,52 @@ static void sel_delete(struct global* g)
 }
 
 // ---------------------------------------------------------------------------
+// Escape sequence state machine handlers
+// ---------------------------------------------------------------------------
+
+static void reset_escape_state(void)
+{
+    esc = esc_none;
+}
+
+static void handle_plain_arrow(struct global* global, char direction)
+{
+    sel_clear(global);
+    switch (direction) {
+        case 'A': pgb_move_up(&global->text); break;
+        case 'B': pgb_move_down(&global->text); break;
+        case 'C': pgb_move_right(&global->text); break;
+        case 'D': pgb_move_left(&global->text); break;
+    }
+    reset_escape_state();
+}
+
+static void handle_shift_arrow(struct global* global, char direction)
+{
+    sel_begin(global);
+    switch (direction) {
+        case 'A': pgb_move_up(&global->text); break;
+        case 'B': pgb_move_down(&global->text); break;
+        case 'C': pgb_move_right(&global->text); break;
+        case 'D': pgb_move_left(&global->text); break;
+    }
+    reset_escape_state();
+}
+
+static void handle_mouse_click(struct global* global, unsigned char mouse_y_byte)
+{
+    int btn = mouse_btn_byte - 32;
+    int col = mouse_x_byte - 32;
+    int row = mouse_y_byte - 32;
+
+    if (btn == 0 && config_get_bool("mouse", 1)) {
+        sel_clear(global);
+        mouse_click_move(global, col, row);
+    }
+    reset_escape_state();
+}
+
+// ---------------------------------------------------------------------------
 // Input handler
 // ---------------------------------------------------------------------------
 enum result input_update(struct global* global)
@@ -221,33 +267,13 @@ enum result input_update(struct global* global)
                 esc = esc_got_bracket;
                 continue;
             }
-            esc = esc_none;
+            reset_escape_state();
             continue; // unknown, discard
         }
         if (esc == esc_got_bracket) {
-            // Plain arrow
-            if (ch == 'A') {
-                sel_clear(global);
-                pgb_move_up(&global->text);
-                esc = esc_none;
-                continue;
-            }
-            if (ch == 'B') {
-                sel_clear(global);
-                pgb_move_down(&global->text);
-                esc = esc_none;
-                continue;
-            }
-            if (ch == 'C') {
-                sel_clear(global);
-                pgb_move_right(&global->text);
-                esc = esc_none;
-                continue;
-            }
-            if (ch == 'D') {
-                sel_clear(global);
-                pgb_move_left(&global->text);
-                esc = esc_none;
+            // Plain arrow keys
+            if (ch == 'A' || ch == 'B' || ch == 'C' || ch == 'D') {
+                handle_plain_arrow(global, ch);
                 continue;
             }
             // Start of mouse reporting sequence \x1b[M
@@ -260,7 +286,7 @@ enum result input_update(struct global* global)
                 esc = esc_got_1;
                 continue;
             }
-            esc = esc_none;
+            reset_escape_state();
             continue;
         }
         if (esc == esc_got_1) {
@@ -268,7 +294,7 @@ enum result input_update(struct global* global)
                 esc = esc_got_semi;
                 continue;
             }
-            esc = esc_none;
+            reset_escape_state();
             continue;
         }
         if (esc == esc_got_semi) {
@@ -276,29 +302,17 @@ enum result input_update(struct global* global)
                 esc = esc_got_2;    // modifier = Shift
                 continue;
             }
-            esc = esc_none;
+            reset_escape_state();
             continue;
         }
         if (esc == esc_got_2) {
             // Shift + Arrow → extend selection
-            esc = esc_none;
-            sel_begin(global); // set anchor if first shift-arrow
-            switch (ch) {
-            case 'A':
-                pgb_move_up(&global->text);
-                continue;
-            case 'B':
-                pgb_move_down(&global->text);
-                continue;
-            case 'C':
-                pgb_move_right(&global->text);
-                continue;
-            case 'D':
-                pgb_move_left(&global->text);
-                continue;
-            default:
+            if (ch == 'A' || ch == 'B' || ch == 'C' || ch == 'D') {
+                handle_shift_arrow(global, ch);
                 continue;
             }
+            reset_escape_state();
+            continue;
         }
         if (esc == esc_got_M) {
             mouse_btn_byte = ch;
@@ -311,18 +325,7 @@ enum result input_update(struct global* global)
             continue;
         }
         if (esc == esc_got_M_x) {
-            unsigned char mouse_y_byte = ch;
-            esc = esc_none;
-
-            // X10 reporting coordinates are 1-based and offset by 32
-            int btn = mouse_btn_byte - 32;
-            int col = mouse_x_byte - 32;
-            int row = mouse_y_byte - 32;
-
-            if (btn == 0 && config_get_bool("mouse", 1)) {
-                sel_clear(global);
-                mouse_click_move(global, col, row);
-            }
+            handle_mouse_click(global, ch);
             continue;
         }
 

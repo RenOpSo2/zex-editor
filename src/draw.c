@@ -39,6 +39,43 @@ static int expand_tabs(const char* input, int input_len, char* output, int outpu
     return out_pos;
 }
 
+// Helper: Apply syntax highlighting based on language
+static void apply_syntax_highlighting(const char* line, int line_len, int language)
+{
+    if (language == 1) {
+        // C/C++
+        char* highlighted = syntax_highlight_line((char*)line, line_len);
+        if (highlighted) {
+            rb_append(&rb, highlighted, strlen(highlighted));
+            free(highlighted);
+        }
+    } else if (language == 2) {
+        // Python
+        char* highlighted = syntax_highlight_python_line((char*)line, line_len);
+        if (highlighted) {
+            rb_append(&rb, highlighted, strlen(highlighted));
+            free(highlighted);
+        }
+    } else {
+        // No highlighting - just output plain text
+        rb_append(&rb, line, line_len);
+    }
+}
+
+// Helper: Draw line number if enabled
+static void draw_line_number(uint32_t line_num)
+{
+    if (config_get_bool("show_line_numbers", 1)) {
+        RB_ESC("\x1b[0m\x1b[38;5;244m");
+        char line_num_str[16];
+        int line_num_len = snprintf(line_num_str, sizeof(line_num_str), "%5d ", line_num + 1);
+        if (line_num_len > 0) {
+            rb_append(&rb, line_num_str, line_num_len);
+        }
+        RB_ESC("\x1b[0m\x1b[39;49m");
+    }
+}
+
 void draw_init(void)
 {
     rb_init(&rb);
@@ -55,7 +92,7 @@ static void draw_cursor_home(void)
     RB_ESC("\x1b[0m\x1b[39;49m\x1b[H\x1b[2J");
 }
 
-static void draw_text(struct paged_gap_buffer* pgb, uint32_t size_y, const char* filepath)
+static void draw_text(const struct paged_gap_buffer* pgb, uint32_t size_y, const char* filepath)
 {
     // Simple pragmatic approach: convert buffer to string, then draw line by line
     char full_buffer[buf_capacity];
@@ -130,16 +167,7 @@ static void draw_text(struct paged_gap_buffer* pgb, uint32_t size_y, const char*
     while (full_buffer[pos] != '\0' && rendered_line < size_y) {
         if (full_buffer[pos] == '\n') {
             if (buffer_line >= scroll_offset) {
-                // Draw line number if enabled
-                if (config_get_bool("show_line_numbers", 1)) {
-                    RB_ESC("\x1b[0m\x1b[38;5;244m");
-                    char line_num_str[16];
-                    int line_num_len = snprintf(line_num_str, sizeof(line_num_str), "%5d ", buffer_line + 1);
-                    if (line_num_len > 0) {
-                        rb_append(&rb, line_num_str, line_num_len);
-                    }
-                    RB_ESC("\x1b[0m\x1b[39;49m");
-                }
+                draw_line_number(buffer_line);
 
                 // Expand tabs using helper function
                 int raw_line_len = pos - line_start;
@@ -147,25 +175,8 @@ static void draw_text(struct paged_gap_buffer* pgb, uint32_t size_y, const char*
                 int expanded_len = expand_tabs(full_buffer + line_start, raw_line_len,
                                                expanded_line, sizeof(expanded_line), tab_size);
 
-                // Apply syntax highlighting if enabled
-                if (language == 1) {
-                    // C/C++
-                    char* highlighted = syntax_highlight_line(expanded_line, expanded_len);
-                    if (highlighted) {
-                        rb_append(&rb, highlighted, strlen(highlighted));
-                        free(highlighted);
-                    }
-                } else if (language == 2) {
-                    // Python
-                    char* highlighted = syntax_highlight_python_line(expanded_line, expanded_len);
-                    if (highlighted) {
-                        rb_append(&rb, highlighted, strlen(highlighted));
-                        free(highlighted);
-                    }
-                } else {
-                    // No highlighting - just output expanded text
-                    rb_append(&rb, expanded_line, expanded_len);
-                }
+                // Apply syntax highlighting
+                apply_syntax_highlighting(expanded_line, expanded_len, language);
 
                 RB_ESC("\x1b[K\r\n");
                 rendered_line++;
@@ -178,16 +189,7 @@ static void draw_text(struct paged_gap_buffer* pgb, uint32_t size_y, const char*
 
     // Handle last line if no trailing newline
     if (line_start < pos && buffer_line >= scroll_offset && rendered_line < size_y) {
-        // Draw line number if enabled
-        if (config_get_bool("show_line_numbers", 1)) {
-            RB_ESC("\x1b[0m\x1b[38;5;244m");
-            char line_num_str[16];
-            int line_num_len = snprintf(line_num_str, sizeof(line_num_str), "%5d ", buffer_line + 1);
-            if (line_num_len > 0) {
-                rb_append(&rb, line_num_str, line_num_len);
-            }
-            RB_ESC("\x1b[0m\x1b[39;49m");
-        }
+        draw_line_number(buffer_line);
 
         // Expand tabs using helper function
         int raw_line_len = pos - line_start;
@@ -195,25 +197,8 @@ static void draw_text(struct paged_gap_buffer* pgb, uint32_t size_y, const char*
         int expanded_len = expand_tabs(full_buffer + line_start, raw_line_len,
                                        expanded_line, sizeof(expanded_line), tab_size);
 
-        // Apply syntax highlighting if enabled
-        if (language == 1) {
-            // C/C++
-            char* highlighted = syntax_highlight_line(expanded_line, expanded_len);
-            if (highlighted) {
-                rb_append(&rb, highlighted, strlen(highlighted));
-                free(highlighted);
-            }
-        } else if (language == 2) {
-            // Python
-            char* highlighted = syntax_highlight_python_line(expanded_line, expanded_len);
-            if (highlighted) {
-                rb_append(&rb, highlighted, strlen(highlighted));
-                free(highlighted);
-            }
-        } else {
-            // No highlighting - just output expanded text
-            rb_append(&rb, expanded_line, expanded_len);
-        }
+        // Apply syntax highlighting
+        apply_syntax_highlighting(expanded_line, expanded_len, language);
 
         RB_ESC("\x1b[K\r\n");
         rendered_line++;

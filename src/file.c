@@ -45,6 +45,10 @@ static enum result file_validate_path(const char* path, char resolved[PATH_MAX])
  */
 enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* arena)
 {
+    if (!path || path[0] == '\0') {
+        return err;
+    }
+
     char resolved[PATH_MAX];
     if (file_validate_path(path, resolved) != ok) return err;
 
@@ -93,6 +97,14 @@ enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* are
  */
 enum result file_write(const char* path, struct paged_gap_buffer* pgb)
 {
+    if (!path || path[0] == '\0') {
+        return err;
+    }
+
+    if (!pgb) {
+        return err;
+    }
+
     /* Build a temp path adjacent to the target file. */
     char tmp_path[PATH_MAX];
     int n = snprintf(tmp_path, sizeof(tmp_path), "%s.XXXXXX", path);
