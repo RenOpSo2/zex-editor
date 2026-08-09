@@ -200,9 +200,21 @@ static void handle_mouse_click(struct global* global, unsigned char mouse_y_byte
     int col = mouse_x_byte - 32;
     int row = mouse_y_byte - 32;
 
-    if (btn == 0 && config_get_bool("mouse", 1)) {
-        sel_clear(global);
-        mouse_click_move(global, col, row);
+    if (config_get_bool("mouse", 1)) {
+        if (btn == 0) { // Left click
+            sel_clear(global);
+            mouse_click_move(global, col, row);
+        } else if (btn == 64) { // Wheel scroll up
+            sel_clear(global);
+            for (int i = 0; i < 3; i++) {
+                pgb_move_up(&global->text);
+            }
+        } else if (btn == 65) { // Wheel scroll down
+            sel_clear(global);
+            for (int i = 0; i < 3; i++) {
+                pgb_move_down(&global->text);
+            }
+        }
     }
     reset_escape_state();
 }
