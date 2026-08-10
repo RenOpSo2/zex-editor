@@ -158,7 +158,7 @@ static void append_color(char** result, int* result_len, int* result_cap, const 
         *result_cap *= 2;
         *result = realloc(*result, *result_cap);
     }
-    strcpy(*result + *result_len, color);
+    memcpy(*result + *result_len, color, color_len);
     *result_len += color_len;
 }
 
