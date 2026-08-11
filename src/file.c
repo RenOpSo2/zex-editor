@@ -15,7 +15,6 @@
  * confirm the result is a regular file (S_ISREG).  This prevents path-
  * traversal and device-file exploitation before any fd is opened.
  *
- * Addresses: NX-001, NX-002
  */
 static enum result file_validate_path(const char* path, char resolved[PATH_MAX])
 {
@@ -41,7 +40,6 @@ static enum result file_validate_path(const char* path, char resolved[PATH_MAX])
  *
  * Enforces MAX_FILE_SIZE via fstat() before entering the read loop.
  *
- * Addresses: NX-001, NX-003
  */
 enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* arena)
 {
@@ -93,7 +91,6 @@ enum result file_read(struct paged_gap_buffer* pgb, const char* path, Arena* are
  *      is atomic on the same filesystem, so readers never see a partial
  *      file and a crash never destroys the original.
  *
- * Addresses: NX-002
  */
 enum result file_write(const char* path, struct paged_gap_buffer* pgb)
 {
