@@ -2,9 +2,11 @@
 #include "nodes.h"
 
 #include <fcntl.h>
+#include <libgen.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -19,7 +21,30 @@
 static enum result file_validate_path(const char* path, char resolved[PATH_MAX])
 {
     char* rp = realpath(path, resolved);
-    if (!rp) return err;
+    if (!rp) {
+        /* If realpath failed because the file doesn't exist yet (ENOENT),
+         * validate that its parent directory exists and is a directory. */
+        char tmp[PATH_MAX];
+        strncpy(tmp, path, sizeof(tmp) - 1);
+        tmp[sizeof(tmp) - 1] = '\0';
+
+        char* dir = dirname(tmp);
+        char dir_resolved[PATH_MAX];
+        if (!realpath(dir, dir_resolved)) return err;
+
+        struct stat st_dir;
+        if (stat(dir_resolved, &st_dir) == -1 || !S_ISDIR(st_dir.st_mode)) return err;
+
+        /* Reconstruct resolved path: <dir_resolved>/<basename> */
+        strncpy(tmp, path, sizeof(tmp) - 1);
+        tmp[sizeof(tmp) - 1] = '\0';
+        char* bname = basename(tmp);
+
+        int n = snprintf(resolved, PATH_MAX, "%s/%s", dir_resolved, bname);
+        if (n < 0 || n >= PATH_MAX) return err;
+
+        return ok;
+    }
 
     struct stat st;
     if (stat(resolved, &st) == -1) return err;

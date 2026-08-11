@@ -1,6 +1,6 @@
 # Compiler & Flags
 CC        = gcc
-CFLAGS ?= -Wall -Wextra -Wpedantic -O2 -std=gnu99
+CFLAGS ?= -Wall -Wextra -Wpedantic -O2 -std=gnu99 -I.
 .DEFAULT_GOAL := all
 
 # Directories
@@ -15,19 +15,19 @@ TARGET    = $(BINDIR)/zex
 SRCS      = $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c)) libmemory/arena.c
 OBJS      = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c))) \
             $(BUILDDIR)/libmemory/arena.o
-DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/test_undo.d $(BUILDDIR)/test_0.2.0.d $(BUILDDIR)/test_config.d $(BUILDDIR)/tests/stress_test.d $(BUILDDIR)/tests/edge_case_test.d
+DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/tests/test_undo.d $(BUILDDIR)/tests/test_0.2.0.d $(BUILDDIR)/tests/test_config.d $(BUILDDIR)/tests/stress_test.d $(BUILDDIR)/tests/edge_case_test.d
 
 # Test targets
-TEST_UNDO_SRCS = test_undo.c
-TEST_UNDO_OBJS = $(BUILDDIR)/test_undo.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+TEST_UNDO_SRCS = tests/test_undo.c
+TEST_UNDO_OBJS = $(BUILDDIR)/tests/test_undo.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 TEST_UNDO_TARGET = $(BINDIR)/test_undo
 
-TEST_020_SRCS = test_0.2.0.c
-TEST_020_OBJS = $(BUILDDIR)/test_0.2.0.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+TEST_020_SRCS = tests/test_0.2.0.c
+TEST_020_OBJS = $(BUILDDIR)/tests/test_0.2.0.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 TEST_020_TARGET = $(BINDIR)/test_0.2.0
 
-TEST_CONFIG_SRCS = test_config.c
-TEST_CONFIG_OBJS = $(BUILDDIR)/test_config.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+TEST_CONFIG_SRCS = tests/test_config.c
+TEST_CONFIG_OBJS = $(BUILDDIR)/tests/test_config.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 TEST_CONFIG_TARGET = $(BINDIR)/test_config
 
 TEST_STRESS_SRCS = tests/stress_test.c
@@ -89,17 +89,17 @@ $(TEST_EDGE_TARGET): $(TEST_EDGE_OBJS)
 	@echo "Test build complete: $@"
 
 # Compile test objects
-$(BUILDDIR)/test_undo.o: test_undo.c
+$(BUILDDIR)/tests/test_undo.o: tests/test_undo.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILDDIR)/test_0.2.0.o: test_0.2.0.c
+$(BUILDDIR)/tests/test_0.2.0.o: tests/test_0.2.0.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILDDIR)/test_config.o: test_config.c
+$(BUILDDIR)/tests/test_config.o: tests/test_config.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
