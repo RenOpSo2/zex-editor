@@ -92,31 +92,13 @@ static void draw_cursor_home(void)
     RB_ESC("\x1b[0m\x1b[39;49m\x1b[H\x1b[2J");
 }
 
-static void draw_text(const struct paged_gap_buffer* pgb, uint32_t size_y, const char* filepath)
+static void compute_cursor_and_totals(const char* full_buffer, uint32_t cursor_pos, uint32_t* out_line, uint32_t* out_col, uint32_t* out_total_lines)
 {
-    // Simple pragmatic approach: convert buffer to string, then draw line by line
-    char full_buffer[buf_capacity];
-    pgb_to_str(full_buffer, sizeof(full_buffer), pgb);
-
-    uint32_t cursor_pos = pgb_cursor_pos(pgb);
-
-    RB_ESC("\x1b[0m\x1b[39;49m");
-
-    uint32_t pos = 0;
-    uint32_t line_start = 0;
-    uint32_t cursor_line = 0;
-    uint32_t cursor_col = 0;
-
-    // First, calculate total lines and cursor position
-    uint32_t total_lines = 0;
     uint32_t temp_line = 0;
     uint32_t temp_col = 0;
     uint32_t buffer_len = strlen(full_buffer);
 
-    // Safety check: ensure cursor position is within buffer bounds
-    if (cursor_pos > buffer_len) {
-        cursor_pos = buffer_len;
-    }
+    if (cursor_pos > buffer_len) cursor_pos = buffer_len;
 
     for (uint32_t i = 0; i < cursor_pos && full_buffer[i] != '\0'; i++) {
         if (full_buffer[i] == '\n') {
@@ -129,18 +111,20 @@ static void draw_text(const struct paged_gap_buffer* pgb, uint32_t size_y, const
             temp_col++;
         }
     }
-    cursor_line = temp_line;
-    cursor_col = temp_col;
 
-    // Count total lines in buffer
+    *out_line = temp_line;
+    *out_col = temp_col;
+
+    uint32_t total = 0;
     for (uint32_t i = 0; full_buffer[i] != '\0'; i++) {
-        if (full_buffer[i] == '\n') total_lines++;
+        if (full_buffer[i] == '\n') total++;
     }
-    if (buffer_len != 0 && full_buffer[buffer_len - 1] != '\n') {
-        total_lines++; // Last line without newline
-    }
+    if (buffer_len != 0 && full_buffer[buffer_len - 1] != '\n') total++;
+    *out_total_lines = total;
+}
 
-    // Calculate scroll offset to keep cursor visible
+static uint32_t compute_scroll_offset(uint32_t cursor_line, uint32_t size_y)
+{
     uint32_t scroll_offset = last_scroll_offset;
     if (cursor_line < scroll_offset) {
         scroll_offset = cursor_line;
@@ -148,79 +132,87 @@ static void draw_text(const struct paged_gap_buffer* pgb, uint32_t size_y, const
         scroll_offset = cursor_line - size_y + 1;
     }
     last_scroll_offset = scroll_offset;
+    return scroll_offset;
+}
 
-    // Get syntax highlighting language
-    int language = 0;
-    if (filepath && filepath[0] != '\0') {
-        language = syntax_get_language(filepath);
-    }
+// Render a single logical line (given start pointer and length)
+static void render_logical_line(const char* line_start, int raw_len, uint32_t line_num, int language)
+{
+    draw_line_number(line_num);
 
-    // Helper buffers for tab expansion
-    static char expanded_line[buf_capacity * 4]; // Enough for tab expansion
+    static char expanded_line[buf_capacity * 4];
+    int tab_size = (int)config_get_number("tabsize", 4);
+    int expanded_len = expand_tabs(line_start, raw_len, expanded_line, sizeof(expanded_line), tab_size);
 
-    // Render lines starting from scroll offset
-    uint32_t rendered_line = 0;
+    apply_syntax_highlighting(expanded_line, expanded_len, language);
+    RB_ESC("\x1b[K\r\n");
+}
+
+// Walk the full_buffer and render only the visible lines determined by scroll_offset
+static void render_visible_lines(const char* full_buffer, uint32_t size_y, uint32_t scroll_offset, int language)
+{
+    uint32_t rendered = 0;
     uint32_t buffer_line = 0;
-    pos = 0;
-    line_start = 0;
+    uint32_t pos = 0;
+    uint32_t line_start_idx = 0;
 
-    while (full_buffer[pos] != '\0' && rendered_line < size_y) {
+    while (full_buffer[pos] != '\0' && rendered < size_y) {
         if (full_buffer[pos] == '\n') {
             if (buffer_line >= scroll_offset) {
-                draw_line_number(buffer_line);
-
-                // Expand tabs using helper function
-                int raw_line_len = pos - line_start;
-                int tab_size = (int)config_get_number("tabsize", 4);
-                int expanded_len = expand_tabs(full_buffer + line_start, raw_line_len,
-                                               expanded_line, sizeof(expanded_line), tab_size);
-
-                // Apply syntax highlighting
-                apply_syntax_highlighting(expanded_line, expanded_len, language);
-
-                RB_ESC("\x1b[K\r\n");
-                rendered_line++;
+                render_logical_line(full_buffer + line_start_idx, (int)(pos - line_start_idx), buffer_line, language);
+                rendered++;
             }
             buffer_line++;
-            line_start = pos + 1;
+            line_start_idx = pos + 1;
         }
         pos++;
     }
 
-    // Handle last line if no trailing newline
-    if (line_start < pos && buffer_line >= scroll_offset && rendered_line < size_y) {
-        draw_line_number(buffer_line);
-
-        // Expand tabs using helper function
-        int raw_line_len = pos - line_start;
-        int tab_size = (int)config_get_number("tabsize", 4);
-        int expanded_len = expand_tabs(full_buffer + line_start, raw_line_len,
-                                       expanded_line, sizeof(expanded_line), tab_size);
-
-        // Apply syntax highlighting
-        apply_syntax_highlighting(expanded_line, expanded_len, language);
-
-        RB_ESC("\x1b[K\r\n");
-        rendered_line++;
+    // Last line without newline
+    if (line_start_idx < pos && buffer_line >= scroll_offset && rendered < size_y) {
+        render_logical_line(full_buffer + line_start_idx, (int)(pos - line_start_idx), buffer_line, language);
+        rendered++;
     }
 
-    // Fill remaining lines
-    for (; rendered_line < size_y; rendered_line++) {
+    for (; rendered < size_y; rendered++) {
         RB_ESC("\x1b[K\r\n");
     }
+}
 
-    // Position cursor (account for status bar at line 1 and line number gutter)
-    // Adjust cursor line for scroll offset
-    uint32_t visible_cursor_line = cursor_line - scroll_offset;
+static void position_cursor(uint32_t cursor_line, uint32_t cursor_col, uint32_t scroll_offset)
+{
+    uint32_t visible_cursor_line = cursor_line;
+    if (visible_cursor_line >= scroll_offset) visible_cursor_line -= scroll_offset; else visible_cursor_line = 0;
+
     char cursor_seq[64];
     int gutter_offset = config_get_bool("show_line_numbers", 1) ? 7 : 1;
-    int len = snprintf(cursor_seq, sizeof(cursor_seq), "\x1b[%d;%dH", visible_cursor_line + 2, cursor_col + gutter_offset);
+    int len = snprintf(cursor_seq, sizeof(cursor_seq), "\x1b[%d;%dH", visible_cursor_line + 2, (int)cursor_col + gutter_offset);
     if (len > 0 && len < (int)sizeof(cursor_seq)) {
         rb_append(&rb, cursor_seq, len);
     }
-
-    // Show cursor
     RB_ESC("\x1b[?25h");
+}
+
+static void draw_text(const struct paged_gap_buffer* pgb, uint32_t size_y, const char* filepath)
+{
+    char full_buffer[buf_capacity];
+    pgb_to_str(full_buffer, sizeof(full_buffer), pgb);
+
+    uint32_t cursor_pos = pgb_cursor_pos(pgb);
+
+    RB_ESC("\x1b[0m\x1b[39;49m");
+
+    uint32_t cursor_line = 0, cursor_col = 0, total_lines = 0;
+    compute_cursor_and_totals(full_buffer, cursor_pos, &cursor_line, &cursor_col, &total_lines);
+
+    uint32_t scroll_offset = compute_scroll_offset(cursor_line, size_y);
+
+    int language = 0;
+    if (filepath && filepath[0] != '\0') language = syntax_get_language(filepath);
+
+    render_visible_lines(full_buffer, size_y, scroll_offset, language);
+
+    position_cursor(cursor_line, cursor_col, scroll_offset);
 }
 
 static void draw_status(struct global* global)
