@@ -32,29 +32,38 @@ static char active_config_path[512] = "";
 static time_t last_config_mtime = 0;
 static int config_loading = 0;
 
+// Fungsi helper untuk safe string copy
+static size_t safe_str_copy(char* dest, size_t dest_size, const char* src, size_t src_len) {
+    if (!dest || dest_size == 0) return 0;
+    
+    size_t copy_len = (src_len < dest_size - 1) ? src_len : dest_size - 1;
+    memcpy(dest, src, copy_len);
+    dest[copy_len] = '\0';
+    return copy_len;
+}
+
 // Default config values setup
 void config_init(void)
 {
     config_entry_count = 0;
 
     // Set default tabsize
-    strncpy(config_entries[0].key, "tabsize", sizeof(config_entries[0].key) - 1);
+    safe_str_copy(config_entries[0].key, sizeof(config_entries[0].key), "tabsize", strlen("tabsize"));
     config_entries[0].type = CONFIG_TYPE_NUMBER;
     config_entries[0].number_val = 4.0;
 
     // Set default mouse
-    strncpy(config_entries[1].key, "mouse", sizeof(config_entries[1].key) - 1);
+    safe_str_copy(config_entries[1].key, sizeof(config_entries[1].key), "mouse", strlen("mouse"));
     config_entries[1].type = CONFIG_TYPE_BOOL;
     config_entries[1].bool_val = 1; // true
 
-
     // Set default show_line_numbers
-    strncpy(config_entries[2].key, "show_line_numbers", sizeof(config_entries[2].key) - 1);
+    safe_str_copy(config_entries[2].key, sizeof(config_entries[2].key), "show_line_numbers", strlen("show_line_numbers"));
     config_entries[2].type = CONFIG_TYPE_BOOL;
     config_entries[2].bool_val = 1; // true
 
     // Set default auto_indent
-    strncpy(config_entries[3].key, "auto_indent", sizeof(config_entries[3].key) - 1);
+    safe_str_copy(config_entries[3].key, sizeof(config_entries[3].key), "auto_indent", strlen("auto_indent"));
     config_entries[3].type = CONFIG_TYPE_BOOL;
     config_entries[3].bool_val = 1; // true
 
@@ -70,16 +79,6 @@ static int find_entry(const char* key)
         }
     }
     return -1;
-}
-
-// Fungsi helper untuk safe string copy
-static size_t safe_str_copy(char* dest, size_t dest_size, const char* src, size_t src_len) {
-    if (!dest || dest_size == 0) return 0;
-    
-    size_t copy_len = (src_len < dest_size - 1) ? src_len : dest_size - 1;
-    memcpy(dest, src, copy_len);
-    dest[copy_len] = '\0';
-    return copy_len;
 }
 
 // Simple JSON parser
@@ -205,7 +204,7 @@ static void write_config_file(void)
     if (config_loading) return;
     if (active_config_path[0] == '\0') {
         // Default to ./zex.json if none active
-        strncpy(active_config_path, "./zex.json", sizeof(active_config_path) - 1);
+        safe_str_copy(active_config_path, sizeof(active_config_path), "./zex.json", strlen("./zex.json"));
     }
 
     FILE* f = fopen(active_config_path, "w");
@@ -262,7 +261,7 @@ static int load_config_file(const char* path)
     config_loading = 0;
     free(buf);
 
-    strncpy(active_config_path, path, sizeof(active_config_path) - 1);
+    safe_str_copy(active_config_path, sizeof(active_config_path), path, strlen(path));
     struct stat st;
     if (stat(path, &st) == 0) {
         last_config_mtime = st.st_mtime;
@@ -278,8 +277,8 @@ int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
         for (int i = 0; raw_val[i] != '\0'; i++) {
             if (!isdigit((unsigned char)raw_val[i])) {
                 if (err_out) {
-                    strncpy(err_out->key, key, sizeof(err_out->key) - 1);
-                    strncpy(err_out->error_msg, "tabsize must be a positive number", sizeof(err_out->error_msg) - 1);
+                    safe_str_copy(err_out->key, sizeof(err_out->key), key, strlen(key));
+                    safe_str_copy(err_out->error_msg, sizeof(err_out->error_msg), "tabsize must be a positive number", strlen("tabsize must be a positive number"));
                 }
                 return 0;
             }
@@ -287,8 +286,8 @@ int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
         int val = atoi(raw_val);
         if (val <= 0 || val > 16) {
             if (err_out) {
-                strncpy(err_out->key, key, sizeof(err_out->key) - 1);
-                strncpy(err_out->error_msg, "tabsize must be between 1 and 16", sizeof(err_out->error_msg) - 1);
+                safe_str_copy(err_out->key, sizeof(err_out->key), key, strlen(key));
+                safe_str_copy(err_out->error_msg, sizeof(err_out->error_msg), "tabsize must be between 1 and 16", strlen("tabsize must be between 1 and 16"));
             }
             return 0;
         }
@@ -296,8 +295,8 @@ int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
         if (strcmp(raw_val, "true") != 0 && strcmp(raw_val, "false") != 0 &&
                 strcmp(raw_val, "1") != 0 && strcmp(raw_val, "0") != 0) {
             if (err_out) {
-                strncpy(err_out->key, key, sizeof(err_out->key) - 1);
-                strncpy(err_out->error_msg, "value must be boolean (true/false or 1/0)", sizeof(err_out->error_msg) - 1);
+                safe_str_copy(err_out->key, sizeof(err_out->key), key, strlen(key));
+                safe_str_copy(err_out->error_msg, sizeof(err_out->error_msg), "value must be boolean (true/false or 1/0)", strlen("value must be boolean (true/false or 1/0)"));
             }
             return 0;
         }
@@ -387,7 +386,7 @@ void config_set_number(const char* key, double val)
     if (idx == -1) {
         if (config_entry_count < MAX_CONFIG_ENTRIES) {
             idx = config_entry_count++;
-            strncpy(config_entries[idx].key, key, sizeof(config_entries[idx].key) - 1);
+            safe_str_copy(config_entries[idx].key, sizeof(config_entries[idx].key), key, strlen(key));
         } else {
             return;
         }
@@ -403,7 +402,7 @@ void config_set_bool(const char* key, int val)
     if (idx == -1) {
         if (config_entry_count < MAX_CONFIG_ENTRIES) {
             idx = config_entry_count++;
-            strncpy(config_entries[idx].key, key, sizeof(config_entries[idx].key) - 1);
+            safe_str_copy(config_entries[idx].key, sizeof(config_entries[idx].key), key, strlen(key));
         } else {
             return;
         }
@@ -419,20 +418,19 @@ void config_set_string(const char* key, const char* val)
     if (idx == -1) {
         if (config_entry_count < MAX_CONFIG_ENTRIES) {
             idx = config_entry_count++;
-            strncpy(config_entries[idx].key, key, sizeof(config_entries[idx].key) - 1);
+            safe_str_copy(config_entries[idx].key, sizeof(config_entries[idx].key), key, strlen(key));
         } else {
             return;
         }
     }
     config_entries[idx].type = CONFIG_TYPE_STRING;
-    strncpy(config_entries[idx].string_val, val, sizeof(config_entries[idx].string_val) - 1);
+    safe_str_copy(config_entries[idx].string_val, sizeof(config_entries[idx].string_val), val, strlen(val));
     write_config_file();
 }
 
 void config_set_filepath(const char* path)
 {
-    strncpy(active_config_path, path, sizeof(active_config_path) - 1);
-    active_config_path[sizeof(active_config_path) - 1] = '\0';
+    safe_str_copy(active_config_path, sizeof(active_config_path), path, strlen(path));
 }
 
 void config_watch(struct global* global)
