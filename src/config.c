@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <errno.h>
+#include <math.h>
 
 #define MAX_KEY_LEN 63
 #define MAX_VAL_LEN 255
@@ -82,11 +84,9 @@ static int find_entry(const char* key)
 }
 
 // Simple JSON parser
-// Improved parse function
 static void parse_json(const char* json_str, size_t json_len) {
     // 1. VALIDASI INPUT
     if (!json_str || json_len == 0 || json_len > MAX_JSON_SIZE) {
-        // Log error
         return;
     }
     
@@ -94,14 +94,20 @@ static void parse_json(const char* json_str, size_t json_len) {
     const char* end = json_str + json_len;
     
     // 2. SKIP WS dengan batas
-    while (p < end && isspace(*p)) p++;
+    while (p < end && isspace((unsigned char)*p)) p++;
     if (p >= end || *p != '{') return;
     p++; // skip '{'
     
-    while (p < end && *p && *p != '}') {
+    while (p < end) {
         // Skip whitespace
-        while (p < end && isspace(*p)) p++;
+        while (p < end && isspace((unsigned char)*p)) p++;
         if (p >= end || *p == '}') break;
+        
+        // Skip stray commas or unexpected characters before key
+        if (*p == ',') {
+            p++;
+            continue;
+        }
         
         // 3. VALIDASI KEY
         if (*p != '"') {
@@ -113,85 +119,185 @@ static void parse_json(const char* json_str, size_t json_len) {
         // 4. PARSE KEY DENGAN BOUNDARY CHECK
         char key[MAX_KEY_LEN + 1] = {0};  // +1 untuk null terminator
         int key_len = 0;
+        int key_valid = 1;
         
-        while (p < end && *p && *p != '"' && key_len < MAX_KEY_LEN) {
-            key[key_len++] = *p++;
+        while (p < end && *p != '"') {
+            if (*p == '\\') {
+                if (p + 1 < end) {
+                    p++;
+                    if (key_len < MAX_KEY_LEN) {
+                        key[key_len++] = *p++;
+                    } else {
+                        key_valid = 0;
+                        p++;
+                    }
+                } else {
+                    key_valid = 0;
+                    p++;
+                    break;
+                }
+            } else if ((unsigned char)*p < 0x20) {
+                // Control character, newline, or NUL is illegal in unescaped string
+                key_valid = 0;
+                break;
+            } else {
+                if (key_len < MAX_KEY_LEN) {
+                    key[key_len++] = *p++;
+                } else {
+                    key_valid = 0;
+                    p++;
+                }
+            }
         }
         key[key_len] = '\0';
         
         // 5. VALIDASI KEY TERMINASI
-        if (p >= end || *p != '"') {
+        if (p >= end || *p != '"' || !key_valid) {
             // Key tidak valid, skip
-            while (p < end && *p && *p != ',') p++;
+            if (p < end && *p == '"') p++;
+            while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+            if (p < end && (*p == ',' || *p == '\n')) p++;
             continue;
         }
         p++; // skip closing quote
         
-        // Skip whitespace
-        while (p < end && isspace(*p)) p++;
-        if (p >= end || *p != ':') continue;
+        // Skip whitespace before ':'
+        while (p < end && isspace((unsigned char)*p)) p++;
+        if (p >= end || *p != ':') {
+            while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+            if (p < end && (*p == ',' || *p == '\n')) p++;
+            continue;
+        }
         p++; // skip ':'
-        while (p < end && isspace(*p)) p++;
+        while (p < end && isspace((unsigned char)*p)) p++;
+        if (p >= end) break;
         
         // 6. PARSE VALUE DENGAN BOUNDARY CHECK
-        if (p < end && *p == '"') {
+        if (*p == '"') {
             p++; // skip quote
             char val_str[MAX_VAL_LEN + 1] = {0};
             int val_len = 0;
+            int val_valid = 1;
             
-            while (p < end && *p && *p != '"' && val_len < MAX_VAL_LEN) {
+            while (p < end && *p != '"') {
                 // 7. HANDLE ESCAPED CHARACTERS
-                if (*p == '\\' && (p + 1) < end) {
-                    switch (*(p + 1)) {
-                        case '"':  val_str[val_len++] = '"';  p += 2; break;
-                        case '\\': val_str[val_len++] = '\\'; p += 2; break;
-                        case 'n':  val_str[val_len++] = '\n'; p += 2; break;
-                        case 't':  val_str[val_len++] = '\t'; p += 2; break;
-                        default:   val_str[val_len++] = *p++; break;
+                if (*p == '\\') {
+                    if (p + 1 < end) {
+                        char esc = *(p + 1);
+                        char to_add = '\0';
+                        switch (esc) {
+                            case '"':  to_add = '"';  break;
+                            case '\\': to_add = '\\'; break;
+                            case 'n':  to_add = '\n'; break;
+                            case 't':  to_add = '\t'; break;
+                            case 'r':  to_add = '\r'; break;
+                            default:   to_add = esc;  break;
+                        }
+                        p += 2;
+                        if (val_len < MAX_VAL_LEN) {
+                            val_str[val_len++] = to_add;
+                        } else {
+                            val_valid = 0;
+                        }
+                    } else {
+                        val_valid = 0;
+                        p++;
+                        break;
                     }
-                    continue;
+                } else if ((unsigned char)*p < 0x20) {
+                    // Control character, newline, or NUL is illegal in unescaped string
+                    val_valid = 0;
+                    break;
+                } else {
+                    if (val_len < MAX_VAL_LEN) {
+                        val_str[val_len++] = *p++;
+                    } else {
+                        val_valid = 0;
+                        p++;
+                    }
                 }
-                val_str[val_len++] = *p++;
             }
-            val_str[val_len] = '\0';
             
-            if (p < end && *p == '"') p++;
-            
-            config_set_string(key, val_str);
+            if (p < end && *p == '"' && val_valid) {
+                p++; // skip closing quote
+                val_str[val_len] = '\0';
+                config_set_string(key, val_str);
+            } else {
+                if (p < end && *p == '"') p++;
+                while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+                if (p < end && (*p == ',' || *p == '\n')) p++;
+                continue;
+            }
             
         } else if (p + 4 <= end && strncmp(p, "true", 4) == 0) {
-            config_set_bool(key, 1);
-            p += 4;
+            if (p + 4 == end || isspace((unsigned char)p[4]) || p[4] == ',' || p[4] == '}') {
+                config_set_bool(key, 1);
+                p += 4;
+            } else {
+                while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+                if (p < end && (*p == ',' || *p == '\n')) p++;
+                continue;
+            }
             
         } else if (p + 5 <= end && strncmp(p, "false", 5) == 0) {
-            config_set_bool(key, 0);
-            p += 5;
+            if (p + 5 == end || isspace((unsigned char)p[5]) || p[5] == ',' || p[5] == '}') {
+                config_set_bool(key, 0);
+                p += 5;
+            } else {
+                while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+                if (p < end && (*p == ',' || *p == '\n')) p++;
+                continue;
+            }
             
-        } else if (p < end && (isdigit(*p) || *p == '-' || *p == '.')) {
+        } else if (isdigit((unsigned char)*p) || *p == '-' || *p == '+') {
             // 8. PARSE NUMBER DENGAN BOUNDARY
             char num_str[64] = {0};
             int num_len = 0;
+            int num_overflow = 0;
             
-            while (p < end && num_len < 63 && 
-                   (isdigit(*p) || *p == '.' || *p == '-' || 
-                    *p == 'e' || *p == 'E' || *p == '+')) {
-                num_str[num_len++] = *p++;
+            while (p < end && (isdigit((unsigned char)*p) || *p == '.' || *p == '-' || 
+                   *p == '+' || *p == 'e' || *p == 'E')) {
+                if (num_len < (int)sizeof(num_str) - 1) {
+                    num_str[num_len++] = *p++;
+                } else {
+                    num_overflow = 1;
+                    p++;
+                }
             }
             num_str[num_len] = '\0';
             
+            if (p < end && !isspace((unsigned char)*p) && *p != ',' && *p != '}') {
+                while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+                if (p < end && (*p == ',' || *p == '\n')) p++;
+                continue;
+            }
+            
             // 9. SAFE NUMBER PARSING
-            char* endptr;
-            double val = strtod(num_str, &endptr);
-            if (endptr != num_str) {  // Valid number
-                config_set_number(key, val);
+            if (!num_overflow && num_len > 0) {
+                errno = 0;
+                char* endptr = NULL;
+                double val = strtod(num_str, &endptr);
+                if (errno != ERANGE && endptr != num_str && *endptr == '\0' && !isnan(val) && !isinf(val)) {
+                    config_set_number(key, val);
+                } else {
+                    while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+                    if (p < end && (*p == ',' || *p == '\n')) p++;
+                    continue;
+                }
+            } else {
+                while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+                if (p < end && (*p == ',' || *p == '\n')) p++;
+                continue;
             }
         } else {
             // Unknown token, skip safely
-            while (p < end && *p && *p != ',' && *p != '}') p++;
+            while (p < end && *p != ',' && *p != '\n' && *p != '}') p++;
+            if (p < end && (*p == ',' || *p == '\n')) p++;
+            continue;
         }
         
         // 10. SKIP COMMA DENGAN BOUNDARY
-        while (p < end && isspace(*p)) p++;
+        while (p < end && isspace((unsigned char)*p)) p++;
         if (p < end && *p == ',') {
             p++; // skip comma
         }
@@ -239,12 +345,23 @@ static void write_config_file(void)
 // Load config helper from file
 static int load_config_file(const char* path)
 {
-    FILE* f = fopen(path, "r");
+    FILE* f = fopen(path, "rb");
     if (!f) return 0;
 
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) {
+        fclose(f);
+        return 0;
+    }
     long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return 0;
+    }
+
+    if (size <= 0 || size > MAX_JSON_SIZE) {
+        fclose(f);
+        return 0;
+    }
 
     char* buf = malloc(size + 1);
     if (!buf) {
@@ -257,7 +374,7 @@ static int load_config_file(const char* path)
     fclose(f);
 
     config_loading = 1;
-    parse_json(buf, strlen(buf));
+    parse_json(buf, read_bytes);
     config_loading = 0;
     free(buf);
 
@@ -272,8 +389,24 @@ static int load_config_file(const char* path)
 // Validate schemas
 int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
 {
+    if (!key || !raw_val) {
+        if (err_out) {
+            if (key) safe_str_copy(err_out->key, sizeof(err_out->key), key, strlen(key));
+            safe_str_copy(err_out->error_msg, sizeof(err_out->error_msg), "key or value is NULL", strlen("key or value is NULL"));
+        }
+        return 0;
+    }
+
     if (strcmp(key, "tabsize") == 0) {
-        // must be a positive integer
+        if (raw_val[0] == '\0') {
+            if (err_out) {
+                safe_str_copy(err_out->key, sizeof(err_out->key), key, strlen(key));
+                safe_str_copy(err_out->error_msg, sizeof(err_out->error_msg), "tabsize must be a positive number", strlen("tabsize must be a positive number"));
+            }
+            return 0;
+        }
+
+        // must be positive digits only
         for (int i = 0; raw_val[i] != '\0'; i++) {
             if (!isdigit((unsigned char)raw_val[i])) {
                 if (err_out) {
@@ -283,8 +416,11 @@ int config_validate(const char* key, const char* raw_val, SchemaError* err_out)
                 return 0;
             }
         }
-        int val = atoi(raw_val);
-        if (val <= 0 || val > 16) {
+
+        char* endptr = NULL;
+        errno = 0;
+        long val = strtol(raw_val, &endptr, 10);
+        if (errno == ERANGE || endptr == raw_val || *endptr != '\0' || val <= 0 || val > 16) {
             if (err_out) {
                 safe_str_copy(err_out->key, sizeof(err_out->key), key, strlen(key));
                 safe_str_copy(err_out->error_msg, sizeof(err_out->error_msg), "tabsize must be between 1 and 16", strlen("tabsize must be between 1 and 16"));
