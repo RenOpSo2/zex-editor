@@ -7,6 +7,10 @@
 #include <unistd.h>
 #include <ctype.h>
 
+#define MAX_KEY_LEN 63
+#define MAX_VAL_LEN 255
+#define MAX_JSON_SIZE 1000000
+
 typedef enum {
     CONFIG_TYPE_NUMBER,
     CONFIG_TYPE_BOOL,
@@ -43,6 +47,7 @@ void config_init(void)
     config_entries[1].type = CONFIG_TYPE_BOOL;
     config_entries[1].bool_val = 1; // true
 
+
     // Set default show_line_numbers
     strncpy(config_entries[2].key, "show_line_numbers", sizeof(config_entries[2].key) - 1);
     config_entries[2].type = CONFIG_TYPE_BOOL;
@@ -67,80 +72,128 @@ static int find_entry(const char* key)
     return -1;
 }
 
-// Helper to skip whitespace
-static const char* skip_ws(const char* s)
-{
-    while (*s && isspace((unsigned char)*s)) {
-        s++;
-    }
-    return s;
+// Fungsi helper untuk safe string copy
+static size_t safe_str_copy(char* dest, size_t dest_size, const char* src, size_t src_len) {
+    if (!dest || dest_size == 0) return 0;
+    
+    size_t copy_len = (src_len < dest_size - 1) ? src_len : dest_size - 1;
+    memcpy(dest, src, copy_len);
+    dest[copy_len] = '\0';
+    return copy_len;
 }
 
 // Simple JSON parser
-static void parse_json(const char* json_str)
-{
-    const char* p = skip_ws(json_str);
-    if (*p != '{') return;
+// Improved parse function
+static void parse_json(const char* json_str, size_t json_len) {
+    // 1. VALIDASI INPUT
+    if (!json_str || json_len == 0 || json_len > MAX_JSON_SIZE) {
+        // Log error
+        return;
+    }
+    
+    const char* p = json_str;
+    const char* end = json_str + json_len;
+    
+    // 2. SKIP WS dengan batas
+    while (p < end && isspace(*p)) p++;
+    if (p >= end || *p != '{') return;
     p++; // skip '{'
-
-    while (*p && *p != '}') {
-        p = skip_ws(p);
-        if (*p == '}') break;
+    
+    while (p < end && *p && *p != '}') {
+        // Skip whitespace
+        while (p < end && isspace(*p)) p++;
+        if (p >= end || *p == '}') break;
+        
+        // 3. VALIDASI KEY
         if (*p != '"') {
-            // Error/malformed JSON key, skip ahead
             p++;
             continue;
         }
         p++; // skip quote
-
-        // Parse key
-        char key[64] = "";
+        
+        // 4. PARSE KEY DENGAN BOUNDARY CHECK
+        char key[MAX_KEY_LEN + 1] = {0};  // +1 untuk null terminator
         int key_len = 0;
-        while (*p && *p != '"' && key_len < 63) {
+        
+        while (p < end && *p && *p != '"' && key_len < MAX_KEY_LEN) {
             key[key_len++] = *p++;
         }
         key[key_len] = '\0';
-        if (*p == '"') p++;
-
-        p = skip_ws(p);
-        if (*p != ':') continue;
+        
+        // 5. VALIDASI KEY TERMINASI
+        if (p >= end || *p != '"') {
+            // Key tidak valid, skip
+            while (p < end && *p && *p != ',') p++;
+            continue;
+        }
+        p++; // skip closing quote
+        
+        // Skip whitespace
+        while (p < end && isspace(*p)) p++;
+        if (p >= end || *p != ':') continue;
         p++; // skip ':'
-        p = skip_ws(p);
-
-        // Parse value
-        if (*p == '"') {
+        while (p < end && isspace(*p)) p++;
+        
+        // 6. PARSE VALUE DENGAN BOUNDARY CHECK
+        if (p < end && *p == '"') {
             p++; // skip quote
-            char val_str[256] = "";
+            char val_str[MAX_VAL_LEN + 1] = {0};
             int val_len = 0;
-            while (*p && *p != '"' && val_len < 255) {
+            
+            while (p < end && *p && *p != '"' && val_len < MAX_VAL_LEN) {
+                // 7. HANDLE ESCAPED CHARACTERS
+                if (*p == '\\' && (p + 1) < end) {
+                    switch (*(p + 1)) {
+                        case '"':  val_str[val_len++] = '"';  p += 2; break;
+                        case '\\': val_str[val_len++] = '\\'; p += 2; break;
+                        case 'n':  val_str[val_len++] = '\n'; p += 2; break;
+                        case 't':  val_str[val_len++] = '\t'; p += 2; break;
+                        default:   val_str[val_len++] = *p++; break;
+                    }
+                    continue;
+                }
                 val_str[val_len++] = *p++;
             }
             val_str[val_len] = '\0';
-            if (*p == '"') p++;
-
-            // Set value
+            
+            if (p < end && *p == '"') p++;
+            
             config_set_string(key, val_str);
-        } else if (strncmp(p, "true", 4) == 0) {
+            
+        } else if (p + 4 <= end && strncmp(p, "true", 4) == 0) {
             config_set_bool(key, 1);
             p += 4;
-        } else if (strncmp(p, "false", 5) == 0) {
+            
+        } else if (p + 5 <= end && strncmp(p, "false", 5) == 0) {
             config_set_bool(key, 0);
             p += 5;
-        } else if (isdigit((unsigned char)*p) || *p == '-' || *p == '.') {
-            char num_str[64] = "";
+            
+        } else if (p < end && (isdigit(*p) || *p == '-' || *p == '.')) {
+            // 8. PARSE NUMBER DENGAN BOUNDARY
+            char num_str[64] = {0};
             int num_len = 0;
-            while (*p && (isdigit((unsigned char)*p) || *p == '.' || *p == '-' || *p == 'e' || *p == 'E' || *p == '+') && num_len < 63) {
+            
+            while (p < end && num_len < 63 && 
+                   (isdigit(*p) || *p == '.' || *p == '-' || 
+                    *p == 'e' || *p == 'E' || *p == '+')) {
                 num_str[num_len++] = *p++;
             }
             num_str[num_len] = '\0';
-            config_set_number(key, atof(num_str));
+            
+            // 9. SAFE NUMBER PARSING
+            char* endptr;
+            double val = strtod(num_str, &endptr);
+            if (endptr != num_str) {  // Valid number
+                config_set_number(key, val);
+            }
         } else {
-            // Unknown/unsupported token, skip
-            p++;
+            // Unknown token, skip safely
+            while (p < end && *p && *p != ',' && *p != '}') p++;
         }
-
-        p = skip_ws(p);
-        if (*p == ',') {
+        
+        // 10. SKIP COMMA DENGAN BOUNDARY
+        while (p < end && isspace(*p)) p++;
+        if (p < end && *p == ',') {
             p++; // skip comma
         }
     }
@@ -205,7 +258,7 @@ static int load_config_file(const char* path)
     fclose(f);
 
     config_loading = 1;
-    parse_json(buf);
+    parse_json(buf, strlen(buf));
     config_loading = 0;
     free(buf);
 
