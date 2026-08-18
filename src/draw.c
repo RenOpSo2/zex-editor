@@ -17,7 +17,15 @@ static uint32_t last_scroll_offset = 0;
 // Safe compile-time length for string literals — never miscounts again.
 #define ESC(s) (s), (sizeof(s) - 1)
 
-// Helper function to expand tabs to spaces
+/**
+ * Expand tab characters to spaces
+ * 
+ * @param input     Source string
+ * @param input_len Length of input
+ * @param output    Output buffer (must be pre-allocated)
+ * @param output_size Size of output buffer
+ * @return Number of characters written (excluding null terminator)
+ */
 static int expand_tabs(const char* input, int input_len, char* output, int output_size, int tab_size)
 {
     int col = 0;

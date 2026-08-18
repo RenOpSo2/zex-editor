@@ -3,6 +3,7 @@ build/
 bin/
 obj/
 release/
+zex-docs/
 
 # Editor files
 *.swp
@@ -10,7 +11,7 @@ release/
 *.o
 *.swo
 *.tar
-*~
+
 
 
 .vscode/
