@@ -1,5 +1,6 @@
 # Zex Editor — AI Agent Skill & Business Context Guide
 
+
 Dokumen ini berisi panduan konteks bisnis, arsitektur sistem, domain rules, dan standar rekayasa software untuk AI Agent yang bekerja di codebase **Zex Editor**.
 
 ---
@@ -77,6 +78,9 @@ zex-editor/
 │   ├── nodes.c / .h      # Paged Gap Buffer, undo/redo stack, search engine
 │   ├── render_buffer.c   # Buffer output layar ke terminal
 │   ├── syntax.c / .h     # Highlighting syntax tokenizer (C/C++)
+src/lib
+├── README.md # Docs API Color
+└── color.h # Lib Color Abstraction
 │   └── term.c / .h       # POSIX terminal raw mode control
 ├── tests/                # Test suite dan unit tests
 ├── Makefile              # Build automation script
