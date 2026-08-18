@@ -4,8 +4,8 @@
  * 
  */
 
-#ifndef TUI_COLOR_H
-#define TUI_COLOR_H
+#ifndef COLOR_H
+#define COLOR_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -480,19 +480,86 @@ static inline void print_rainbow(const char *text) {
 }
 
 /* ============================================
- * CONVENIENCE MACROS
+ * CONVENIENCE FUNCTIONS FOR COMMON STYLES
  * ============================================ */
 
-#define COLOR_RESET "\033[0m"
+// Pre-defined style functions
+static inline Style style_error(void) {
+    return style_create(MATERIAL_RED, DRACULA_BG);
+}
 
-#define STYLE_ERROR style_create(MATERIAL_RED, DRACULA_BG)
-#define STYLE_SUCCESS style_create(MATERIAL_GREEN, DRACULA_BG)
-#define STYLE_WARNING style_create(MATERIAL_ORANGE, DRACULA_BG)
-#define STYLE_INFO style_create(MATERIAL_BLUE, DRACULA_BG)
+static inline Style style_success(void) {
+    return style_create(MATERIAL_GREEN, DRACULA_BG);
+}
 
-#define PRINT_ERROR(msg) print_styled(msg, &(Style){STYLE_ERROR})
-#define PRINT_SUCCESS(msg) print_styled(msg, &(Style){STYLE_SUCCESS})
-#define PRINT_WARNING(msg) print_styled(msg, &(Style){STYLE_WARNING})
-#define PRINT_INFO(msg) print_styled(msg, &(Style){STYLE_INFO})
+static inline Style style_warning(void) {
+    return style_create(MATERIAL_ORANGE, DRACULA_BG);
+}
 
-#endif // TUI_COLOR_H
+static inline Style style_info(void) {
+    return style_create(MATERIAL_BLUE, DRACULA_BG);
+}
+
+// Convenience print functions
+static inline void print_error(const char *msg) {
+    Style s = style_error();
+    print_styled(msg, &s);
+}
+
+static inline void print_success(const char *msg) {
+    Style s = style_success();
+    print_styled(msg, &s);
+}
+
+static inline void print_warning(const char *msg) {
+    Style s = style_warning();
+    print_styled(msg, &s);
+}
+
+static inline void print_info(const char *msg) {
+    Style s = style_info();
+    print_styled(msg, &s);
+}
+
+// Formatted versions
+static inline void printf_error(const char *format, ...) {
+    Style s = style_error();
+    va_list args;
+    va_start(args, format);
+    printf("%s", style_to_ansi(&s));
+    vprintf(format, args);
+    printf("%s", style_reset());
+    va_end(args);
+}
+
+static inline void printf_success(const char *format, ...) {
+    Style s = style_success();
+    va_list args;
+    va_start(args, format);
+    printf("%s", style_to_ansi(&s));
+    vprintf(format, args);
+    printf("%s", style_reset());
+    va_end(args);
+}
+
+static inline void printf_warning(const char *format, ...) {
+    Style s = style_warning();
+    va_list args;
+    va_start(args, format);
+    printf("%s", style_to_ansi(&s));
+    vprintf(format, args);
+    printf("%s", style_reset());
+    va_end(args);
+}
+
+static inline void printf_info(const char *format, ...) {
+    Style s = style_info();
+    va_list args;
+    va_start(args, format);
+    printf("%s", style_to_ansi(&s));
+    vprintf(format, args);
+    printf("%s", style_reset());
+    va_end(args);
+}
+
+#endif 
