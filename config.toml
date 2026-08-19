@@ -1,0 +1,5 @@
+[llm]
+provider = "openrouter"
+model = "openrouter/google/gemini-2.0-flash-free"
+endpoint = "https://openrouter.ai/api/v1"
+api_key = "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"
