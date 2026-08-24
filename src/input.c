@@ -5,6 +5,7 @@
 #include "global.h"
 #include "config.h"
 #include "draw.h"
+#include "dispwidth.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -65,17 +66,21 @@ static void mouse_click_move(struct global* global, uint32_t screen_col, uint32_
         pos++;
     }
 
-    // Now walk columns on the target line, accounting for tabs and control characters
+    // Now walk columns on the target line, honouring the same width rules as
+    // the renderer (tab expansion, control-character caret pairs and UTF-8).
     while (buffer[pos] != '\0' && buffer[pos] != '\n' && (int)col < target_col) {
-        if (buffer[pos] == '\t') {
-            int tab_size = (int)config_get_number("tabsize", 4);
-            col += tab_size - (col % tab_size);
-        } else if (buffer[pos] < 32 || buffer[pos] == 127) {
-            col += 2; // Control characters rendered as caret pair
-        } else {
-            col++;
+        unsigned char ch[4];
+        size_t got = 0;
+        ch[got++] = (unsigned char)buffer[pos];
+        int extra = utf8_trail_count((unsigned char)buffer[pos]);
+        for (int k = 0; k < extra && buffer[pos + 1 + k] != '\0'; k++) {
+            ch[got++] = (unsigned char)buffer[pos + 1 + k];
         }
-        pos++;
+        int tab_size = (int)config_get_number("tabsize", 4);
+        size_t consumed;
+        uint32_t w = char_width(ch, got, col, (uint32_t)tab_size, &consumed);
+        col += w;
+        pos += (uint32_t)consumed;
     }
 
     pgb_move_to_pos(&global->text, pos);

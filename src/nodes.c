@@ -15,6 +15,7 @@
 #include "nodes.h"
 #include "global.h"
 #include "config.h"
+#include "dispwidth.h"
 #include <string.h>
 #include <unistd.h>
 #include <stddef.h>
@@ -360,6 +361,74 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
  * Moves cursor left temporarily to count characters until newline or buffer start.
  * Restores cursor position after calculation.
  */
+/* --- Display-width-aware cursor primitives ------------------------------- */
+
+/* The byte sitting immediately to the right of the cursor (-1 at EOF). */
+static int peek_next_byte(const struct paged_gap_buffer* pgb)
+{
+    const struct page* p = pgb->active_page;
+    if (p->gap_end < PAGE_CAPACITY) return (unsigned char)p->data[p->gap_end];
+    if (p->next) return (unsigned char)p->next->data[0];
+    return -1;
+}
+
+/* Display width of the character whose lead byte is at page `p`, index `idx`,
+ * reading any continuation bytes forward from there. Uses the same rules as
+ * the renderer so the column math can never drift. */
+static uint32_t width_at(struct page* p, uint32_t idx, uint32_t col, uint32_t tab_size)
+{
+    unsigned char buf[4];
+    size_t n = 0;
+    if (idx < PAGE_CAPACITY) {
+        buf[n++] = (unsigned char)p->data[idx];
+        int extra = utf8_trail_count(buf[0]);
+        for (int k = 1; k <= extra && (idx + (uint32_t)k) < PAGE_CAPACITY; k++) {
+            buf[n++] = (unsigned char)p->data[idx + (uint32_t)k];
+        }
+    }
+    if (n == 0) return 1;
+    size_t consumed;
+    return char_width(buf, n, col, tab_size, &consumed);
+}
+
+/* Inspect the character to the right of the cursor without moving it.
+ * *len receives the byte length (so the caller can advance by exactly that
+ * many single-byte moves), *width the display columns it occupies. */
+static void next_char_info(const struct paged_gap_buffer* pgb, uint32_t col,
+                           uint32_t tab_size, size_t* len, uint32_t* width)
+{
+    const struct page* p = pgb->active_page;
+    unsigned char buf[4];
+    size_t got = 0;
+
+    if (p->gap_end < PAGE_CAPACITY) {
+        buf[got++] = (unsigned char)p->data[p->gap_end];
+        int extra = utf8_trail_count(buf[0]);
+        for (int k = 1; k <= extra; k++) {
+            if (p->gap_end + (uint32_t)k < PAGE_CAPACITY) buf[got++] = (unsigned char)p->data[p->gap_end + (uint32_t)k];
+            else break;
+        }
+    } else if (p->next) {
+        const struct page* np = p->next;
+        buf[got++] = (unsigned char)np->data[0];
+        int extra = utf8_trail_count(buf[0]);
+        for (int k = 1; k <= extra; k++) buf[got++] = (unsigned char)np->data[k];
+    }
+
+    if (got == 0) { *len = 0; *width = 0; return; }
+    *width = char_width(buf, got, col, tab_size, len);
+}
+
+/**
+ * get_current_column - Calculate current column position (display columns)
+ * @pgb: Paged gap buffer
+ *
+ * Returns: Column number (0-based) from start of current line.
+ *
+ * Moves the cursor left to count, then restores it. Multi-byte UTF-8 is
+ * counted as one display unit (the continuation bytes are skipped and the
+ * lead byte accounts for the whole character).
+ */
 static uint32_t get_current_column(struct paged_gap_buffer* pgb)
 {
     uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
@@ -370,21 +439,21 @@ static uint32_t get_current_column(struct paged_gap_buffer* pgb)
         if (p->gap_start == 0 && !p->prev) break;
         pgb_move_left(pgb);
         p = pgb->active_page;
-        if (p->data[p->gap_start] == '\n') {
+        unsigned char b = (unsigned char)p->data[p->gap_start];
+        if (b == '\n') {
             pgb_move_right(pgb);
             break;
         }
-        // Account for tab expansion and control characters like the renderer does
-        if (p->data[p->gap_start] == '\t') {
-            col += tab_size - (col % tab_size);
-        } else if (p->data[p->gap_start] < 32 || p->data[p->gap_start] == 127) {
-            col += 2; // Control characters rendered as caret pair
-        } else {
-            col++;
+        /* Continuation bytes belong to the preceding unit; let the lead
+         * byte account for the full character. */
+        if ((b & 0xC0) == 0x80) {
+            steps++;
+            continue;
         }
+        col += width_at(p, p->gap_start, col, tab_size);
         steps++;
     }
-    // Restore cursor position by moving right steps times (not col times)
+    // Restore cursor position by moving right the same number of bytes.
     for (uint32_t i = 0; i < steps; i++) {
         pgb_move_right(pgb);
     }
@@ -420,31 +489,36 @@ static void move_to_line_start(struct paged_gap_buffer* pgb)
  * Moves cursor right temporarily to count characters.
  * Restores cursor position after calculation.
  */
+/**
+ * get_line_length - Display width of the current line (to its newline).
+ * @pgb: Paged gap buffer
+ *
+ * Returns: Display columns occupied by the current line, excluding the
+ * newline. Moves the cursor right to measure, then restores it. Tab
+ * expansion, control characters and UTF-8 widths are all honoured.
+ */
 static uint32_t get_line_length(struct paged_gap_buffer* pgb)
 {
     uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = 0;
     uint32_t steps = 0;
-    while (1) {
-        struct page* p = pgb->active_page;
-        if (p->gap_end == PAGE_CAPACITY && !p->next) break;
-        pgb_move_right(pgb);
-        p = pgb->active_page;
-        if (p->data[p->gap_start - 1] == '\n') {
-            pgb_move_left(pgb);
+    for (;;) {
+        int nb = peek_next_byte(pgb);
+        if (nb < 0) break;
+        if (nb == '\n') {
+            pgb_move_right(pgb);
+            steps++;
             break;
         }
-        // Account for tab expansion and control characters like the renderer does
-        if (p->data[p->gap_start - 1] == '\t') {
-            col += tab_size - (col % tab_size);
-        } else if (p->data[p->gap_start - 1] < 32 || p->data[p->gap_start - 1] == 127) {
-            col += 2; // Control characters rendered as caret pair
-        } else {
-            col++;
-        }
-        steps++;
+        size_t len;
+        uint32_t w;
+        next_char_info(pgb, col, tab_size, &len, &w);
+        if (len == 0) break;
+        for (size_t i = 0; i < len; i++) pgb_move_right(pgb);
+        col += w;
+        steps += (uint32_t)len;
     }
-    // Restore cursor position by moving left steps times (not col times)
+    // Restore cursor position by moving left the same number of bytes.
     for (uint32_t i = 0; i < steps; i++) {
         pgb_move_left(pgb);
     }
@@ -452,14 +526,35 @@ static uint32_t get_line_length(struct paged_gap_buffer* pgb)
 }
 
 /**
+ * Move the cursor right to `target` display columns, stopping at the line end.
+ * Used by the vertical-motion helpers to preserve the horizontal position.
+ */
+static void move_to_column(struct paged_gap_buffer* pgb, uint32_t target, uint32_t tab_size)
+{
+    uint32_t cur = 0;
+    while (cur < target) {
+        int nb = peek_next_byte(pgb);
+        if (nb < 0 || nb == '\n') break;
+        size_t len;
+        uint32_t w;
+        next_char_info(pgb, cur, tab_size, &len, &w);
+        if (len == 0) break;
+        if (cur + w > target) break; /* landing here would overshoot */
+        for (size_t i = 0; i < len; i++) pgb_move_right(pgb);
+        cur += w;
+    }
+}
+
+/**
  * pgb_move_up - Move cursor up one line
  * @pgb: Paged gap buffer
  * 
- * Preserves horizontal position as much as possible.
+ * Preserves horizontal position (in display columns) as much as possible.
  * If current column exceeds previous line length, snaps to line end.
  */
 void pgb_move_up(struct paged_gap_buffer* pgb)
 {
+    uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = get_current_column(pgb);
 
     // If already at first line, return (cursor already restored by get_current_column)
@@ -467,48 +562,47 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
         return;
     }
 
-    // Move to previous line
+    // Move to previous line: start of current line, across the newline, then
+    // to the start of the previous line so get_line_length measures it fully.
     move_to_line_start(pgb);
     pgb_move_left(pgb);
+    move_to_line_start(pgb);
 
     // Get previous line length
     uint32_t prev_line_len = get_line_length(pgb);
 
     // Move to target column (snap to end if needed)
     uint32_t target = col < prev_line_len ? col : prev_line_len;
-    for (uint32_t i = 0; i < target; i++) {
-        pgb_move_right(pgb);
-    }
+    move_to_column(pgb, target, tab_size);
 }
 
 /**
  * pgb_move_down - Move cursor down one line
  * @pgb: Paged gap buffer
  * 
- * Preserves horizontal position as much as possible.
+ * Preserves horizontal position (in display columns) as much as possible.
  * If at last line, does nothing.
  */
 void pgb_move_down(struct paged_gap_buffer* pgb)
 {
+    uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = get_current_column(pgb);
 
     // Move to next line
-    while (1) {
-        struct page* p = pgb->active_page;
-        if (p->gap_end == PAGE_CAPACITY && !p->next) return;  // At end of buffer
-        pgb_move_right(pgb);
-        p = pgb->active_page;
-        if (p->data[p->gap_start - 1] == '\n') {
+    for (;;) {
+        int nb = peek_next_byte(pgb);
+        if (nb < 0) return;               // At end of buffer
+        if (nb == '\n') {
+            pgb_move_right(pgb);
             break;
         }
+        pgb_move_right(pgb);
     }
 
     // Get next line length and move to target column
     uint32_t next_line_len = get_line_length(pgb);
     uint32_t target = col < next_line_len ? col : next_line_len;
-    for (uint32_t i = 0; i < target; i++) {
-        pgb_move_right(pgb);
-    }
+    move_to_column(pgb, target, tab_size);
 }
 
 // ========== Selection & Clipboard Operations ==========

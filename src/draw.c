@@ -3,6 +3,7 @@
 #include "render_buffer.h"
 #include "syntax.h"
 #include "config.h"
+#include "dispwidth.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,31 +65,36 @@ static uint32_t caret_bytes(unsigned char c, char out[2])
     return 2;
 }
 
-/** Append one byte in display form against a column budget. */
-static void append_sanitized_byte(RenderBuffer* out, int byte, uint32_t* budget)
-{
-    if (!out || !budget || *budget == 0) return;
-
-    unsigned char c = (unsigned char)byte;
-    if (c < 32 || c == 127) {
-        if (*budget < 2) return; /* caret pair does not fit */
-        char pair[2];
-        caret_bytes(c, pair);
-        if (rb_append(out, pair, 2) != ok) return;
-        *budget -= 2;
-    } else {
-        if (rb_append_char(out, (char)c) != ok) return;
-        *budget -= 1;
-    }
-}
-
-/** Append a byte string in display form, clamped to `*budget` columns. */
+/** Append a byte string in display form, clamped to `*budget` columns.
+ *  Honours the same width rules as the document renderer (UTF-8 aware). */
 static void append_sanitized(RenderBuffer* out, const char* s, size_t len, uint32_t* budget)
 {
-    if (!s) return;
-    for (size_t i = 0; i < len; i++) {
-        if (budget && *budget == 0) break;
-        append_sanitized_byte(out, (unsigned char)s[i], budget);
+    if (!out || !s || !budget) return;
+    size_t i = 0;
+    while (i < len && *budget > 0) {
+        unsigned char ch[4];
+        size_t got = 0;
+        ch[got++] = (unsigned char)s[i++];
+        int extra = utf8_trail_count(ch[0]);
+        for (int k = 0; k < extra && i < len; k++) {
+            ch[got++] = (unsigned char)s[i++];
+        }
+
+        unsigned char b = ch[0];
+        if (b < 32 || b == 127) {
+            if (*budget < 2) break; /* caret pair does not fit */
+            char pair[2];
+            caret_bytes(b, pair);
+            if (rb_append(out, pair, 2) != ok) return;
+            *budget -= 2;
+        } else {
+            uint32_t cp;
+            (void)utf8_decode(ch, got, &cp);
+            uint32_t w = codepoint_width(cp);
+            if (w > *budget) break;
+            if (rb_append(out, (const char*)ch, got) != ok) return;
+            *budget -= w;
+        }
     }
 }
 
@@ -149,27 +155,36 @@ static void compute_doc_stats(const struct paged_gap_buffer* pgb, uint32_t curso
     pgb_reader_init(&it, pgb);
 
     int c;
+    unsigned char ch[4];
     while ((c = pgb_reader_next(&it)) >= 0) {
+        /* Gather a whole character so multibyte UTF-8 is counted as one
+         * display unit instead of one column per byte. */
+        size_t got = 0;
+        ch[got++] = (unsigned char)c;
+        int extra = utf8_trail_count((unsigned char)c);
+        for (int k = 0; k < extra; k++) {
+            int d = pgb_reader_next(&it);
+            if (d < 0) break;
+            ch[got++] = (unsigned char)d;
+        }
+
         if (len < cursor_pos) {
-            if (c == '\n') {
+            if (ch[0] == '\n') {
                 line++;
                 col = 0;
-            } else if (c == '\t') {
-                col += tab_size - (col % tab_size);
-            } else if (c < 32 || c == 127) {
-                col += 2; /* rendered as a two-column caret pair */
             } else {
-                col++;
+                size_t consumed;
+                col += char_width(ch, got, col, tab_size, &consumed);
             }
         }
 
-        if (c == '\n') {
+        if (ch[0] == '\n') {
             newlines++;
             ends_with_nl = 1;
         } else {
             ends_with_nl = 0;
         }
-        len++;
+        len += (uint32_t)got;
     }
 
     st->cur_line = line;
@@ -190,15 +205,22 @@ static uint32_t compute_scroll_offset(uint32_t cursor_line, uint32_t size_y)
 }
 
 /**
- * Store one raw document byte into the display-line scratch buffer,
- * expanding tabs, defusing control characters and enforcing the width cap
- * so the line can never wrap onto the next screen row.
+ * Store one document character (the raw bytes in `ch`, length `n`) into the
+ * display-line scratch buffer, expanding tabs, defusing control characters and
+ * enforcing the width cap so the line can never wrap onto the next screen row.
+ *
+ * The whole character is written as a single unit: a multi-byte UTF-8
+ * sequence is never split across the clip boundary, which keeps the rendered
+ * text and the cursor column (computed by the same width rules) in lock-step.
  */
-static void line_store_byte(unsigned char c, uint32_t* disp_cols, uint32_t tab_size, uint32_t width)
+static void line_store_char(const unsigned char* ch, size_t n, uint32_t* disp_cols,
+                            uint32_t tab_size, uint32_t width)
 {
     if (*disp_cols >= width) return; /* rest of the line is clipped */
 
-    if (c == '\t') {
+    unsigned char b = ch[0];
+
+    if (b == '\t') {
         uint32_t spaces = tab_size - (*disp_cols % tab_size);
         while (spaces-- > 0) {
             if (*disp_cols >= width) break; /* clip a partially fitting tab */
@@ -208,17 +230,25 @@ static void line_store_byte(unsigned char c, uint32_t* disp_cols, uint32_t tab_s
         return;
     }
 
-    if (c < 32 || c == 127) {
+    if (b < 32 || b == 127) {
         if (width - *disp_cols < 2) return; /* caret pair would overflow */
         char pair[2];
-        caret_bytes(c, pair);
+        caret_bytes(b, pair);
         if (rb_append(&line_disp, pair, 2) != ok) return;
         *disp_cols += 2;
         return;
     }
 
-    if (rb_append_char(&line_disp, (char)c) != ok) return;
-    (*disp_cols)++;
+    /* Normal / UTF-8 character: count by display width, clip atomically. */
+    uint32_t cp;
+    (void)utf8_decode(ch, n, &cp);
+    uint32_t w = codepoint_width(cp);
+    if (*disp_cols + w > width) {
+        *disp_cols = width; /* line is clipped; stop storing the rest */
+        return;
+    }
+    if (rb_append(&line_disp, (const char*)ch, n) != ok) return;
+    *disp_cols += w;
 }
 
 /** Emit the prepared display line: gutter, highlighted body, erase-to-EOL. */
@@ -270,6 +300,7 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
     pgb_reader_init(&it, pgb);
 
     int c;
+    unsigned char ch[4];
     while ((c = pgb_reader_next(&it)) >= 0 && rendered < rows) {
         if (c == '\n') {
             if (storing) {
@@ -278,16 +309,27 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
                 storing = 0;
             }
             line_no++;
-        } else {
-            /* Loop guard guarantees rendered < rows here. */
-            if (!storing && line_no >= scroll_offset) {
-                storing = 1;
-                rb_clear(&line_disp);
-                disp_cols = 0;
-            }
-            if (storing) {
-                line_store_byte((unsigned char)c, &disp_cols, tab_size, width);
-            }
+            continue;
+        }
+
+        /* Gather a whole character before storing, so multibyte UTF-8 is
+         * handled (and clipped) as a single display unit. */
+        size_t got = 0;
+        ch[got++] = (unsigned char)c;
+        int extra = utf8_trail_count((unsigned char)c);
+        for (int k = 0; k < extra; k++) {
+            int d = pgb_reader_next(&it);
+            if (d < 0) break;
+            ch[got++] = (unsigned char)d;
+        }
+
+        if (!storing && line_no >= scroll_offset) {
+            storing = 1;
+            rb_clear(&line_disp);
+            disp_cols = 0;
+        }
+        if (storing) {
+            line_store_char(ch, got, &disp_cols, tab_size, width);
         }
     }
 
@@ -374,24 +416,19 @@ static void draw_status(struct global* global, uint32_t cols)
     }
 
     /* Flash message in yellow (if any): next priority. */
-    struct pgb_reader mit;
-    pgb_reader_init(&mit, &global->msg);
-    int first = pgb_reader_next(&mit);
-    if (first >= 0 && budget > 0) {
-        uint32_t indent_w = (budget > (sizeof(indent) - 1)) ? (uint32_t)(sizeof(indent) - 1) : budget;
-        budget -= indent_w;
-        rb_append(&rb, indent, indent_w);
-        RB_ESC(msg_color);
+    if (global->msg.head && budget > 0) {
+        char msg_buf[256];
+        pgb_to_str(msg_buf, sizeof(msg_buf), &global->msg);
+        if (msg_buf[0] != '\0') {
+            uint32_t indent_w = (budget > (sizeof(indent) - 1)) ? (uint32_t)(sizeof(indent) - 1) : budget;
+            budget -= indent_w;
+            rb_append(&rb, indent, indent_w);
+            RB_ESC(msg_color);
 
-        uint32_t msg_budget = budget;
-        append_sanitized_byte(&rb, first, &msg_budget);
-
-        int mc;
-        while ((mc = pgb_reader_next(&mit)) >= 0) {
-            if (msg_budget == 0) break;
-            append_sanitized_byte(&rb, mc, &msg_budget);
+            uint32_t msg_budget = budget;
+            append_sanitized(&rb, msg_buf, strlen(msg_buf), &msg_budget);
+            budget -= msg_budget;
         }
-        budget -= msg_budget;
     }
 
     /* Key hints last: they absorb whatever width remains. */

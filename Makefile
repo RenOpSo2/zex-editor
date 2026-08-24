@@ -15,7 +15,7 @@ TARGET    = $(BINDIR)/zex
 SRCS      = $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c)) libmemory/arena.c
 OBJS      = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c))) \
             $(BUILDDIR)/libmemory/arena.o
-DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/tests/test_undo.d $(BUILDDIR)/tests/test_0.2.0.d $(BUILDDIR)/tests/test_config.d $(BUILDDIR)/tests/stress_test.d $(BUILDDIR)/tests/edge_case_test.d
+DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/tests/test_undo.d $(BUILDDIR)/tests/test_0.2.0.d $(BUILDDIR)/tests/test_config.d $(BUILDDIR)/tests/stress_test.d $(BUILDDIR)/tests/edge_case_test.d $(BUILDDIR)/tests/test_cursor.d
 
 # Test targets
 TEST_UNDO_SRCS = tests/test_undo.c
@@ -38,8 +38,13 @@ TEST_EDGE_SRCS = tests/edge_case_test.c
 TEST_EDGE_OBJS = $(BUILDDIR)/tests/edge_case_test.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 TEST_EDGE_TARGET = $(BINDIR)/test_edge
 
+# Cursor accuracy regression test
+TEST_CURSOR_SRCS = tests/test_cursor.c
+TEST_CURSOR_OBJS = $(BUILDDIR)/tests/test_cursor.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
+TEST_CURSOR_TARGET = $(BINDIR)/test_cursor
+
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge bench-search
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor bench-search
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -110,6 +115,16 @@ $(BUILDDIR)/tests/stress_test.o: tests/stress_test.c
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(BUILDDIR)/tests/edge_case_test.o: tests/edge_case_test.c
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(TEST_CURSOR_TARGET): $(TEST_CURSOR_OBJS)
+	@echo "Linking cursor test..."
+	@$(CC) $(CFLAGS) $(TEST_CURSOR_OBJS) -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(BUILDDIR)/tests/test_cursor.o: tests/test_cursor.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
@@ -187,8 +202,12 @@ test-edge: dirs $(TEST_EDGE_TARGET)
 	@echo "Running edge case test..."
 	@$(BINDIR)/test_edge
 
+test-cursor: dirs $(TEST_CURSOR_TARGET)
+	@echo "Running cursor accuracy test..."
+	@$(BINDIR)/test_cursor
+
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET)
 	@echo "Running test_undo..."
 	@$(BINDIR)/test_undo
 	@echo "Running test_0.2.0..."
@@ -199,3 +218,5 @@ test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_S
 	@$(BINDIR)/test_stress
 	@echo "Running test_edge..."
 	@$(BINDIR)/test_edge
+	@echo "Running test_cursor..."
+	@$(BINDIR)/test_cursor
