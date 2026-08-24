@@ -65,11 +65,13 @@ static void mouse_click_move(struct global* global, uint32_t screen_col, uint32_
         pos++;
     }
 
-    // Now walk columns on the target line, accounting for tabs
+    // Now walk columns on the target line, accounting for tabs and control characters
     while (buffer[pos] != '\0' && buffer[pos] != '\n' && (int)col < target_col) {
         if (buffer[pos] == '\t') {
             int tab_size = (int)config_get_number("tabsize", 4);
             col += tab_size - (col % tab_size);
+        } else if (buffer[pos] < 32 || buffer[pos] == 127) {
+            col += 2; // Control characters rendered as caret pair
         } else {
             col++;
         }

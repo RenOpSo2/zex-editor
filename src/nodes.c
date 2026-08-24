@@ -14,6 +14,7 @@
 
 #include "nodes.h"
 #include "global.h"
+#include "config.h"
 #include <string.h>
 #include <unistd.h>
 #include <stddef.h>
@@ -361,7 +362,9 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
  */
 static uint32_t get_current_column(struct paged_gap_buffer* pgb)
 {
+    uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = 0;
+    uint32_t steps = 0;
     while (1) {
         struct page* p = pgb->active_page;
         if (p->gap_start == 0 && !p->prev) break;
@@ -371,10 +374,18 @@ static uint32_t get_current_column(struct paged_gap_buffer* pgb)
             pgb_move_right(pgb);
             break;
         }
-        col++;
+        // Account for tab expansion and control characters like the renderer does
+        if (p->data[p->gap_start] == '\t') {
+            col += tab_size - (col % tab_size);
+        } else if (p->data[p->gap_start] < 32 || p->data[p->gap_start] == 127) {
+            col += 2; // Control characters rendered as caret pair
+        } else {
+            col++;
+        }
+        steps++;
     }
-    // Restore cursor position by moving right col times
-    for (uint32_t i = 0; i < col; i++) {
+    // Restore cursor position by moving right steps times (not col times)
+    for (uint32_t i = 0; i < steps; i++) {
         pgb_move_right(pgb);
     }
     return col;
@@ -411,7 +422,9 @@ static void move_to_line_start(struct paged_gap_buffer* pgb)
  */
 static uint32_t get_line_length(struct paged_gap_buffer* pgb)
 {
-    uint32_t len = 0;
+    uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
+    uint32_t col = 0;
+    uint32_t steps = 0;
     while (1) {
         struct page* p = pgb->active_page;
         if (p->gap_end == PAGE_CAPACITY && !p->next) break;
@@ -421,13 +434,21 @@ static uint32_t get_line_length(struct paged_gap_buffer* pgb)
             pgb_move_left(pgb);
             break;
         }
-        len++;
+        // Account for tab expansion and control characters like the renderer does
+        if (p->data[p->gap_start - 1] == '\t') {
+            col += tab_size - (col % tab_size);
+        } else if (p->data[p->gap_start - 1] < 32 || p->data[p->gap_start - 1] == 127) {
+            col += 2; // Control characters rendered as caret pair
+        } else {
+            col++;
+        }
+        steps++;
     }
-    // Restore cursor position by moving left len times
-    for (uint32_t i = 0; i < len; i++) {
+    // Restore cursor position by moving left steps times (not col times)
+    for (uint32_t i = 0; i < steps; i++) {
         pgb_move_left(pgb);
     }
-    return len;
+    return col;
 }
 
 /**
