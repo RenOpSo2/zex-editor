@@ -373,6 +373,10 @@ static uint32_t get_current_column(struct paged_gap_buffer* pgb)
         }
         col++;
     }
+    // Restore cursor position by moving right col times
+    for (uint32_t i = 0; i < col; i++) {
+        pgb_move_right(pgb);
+    }
     return col;
 }
 
@@ -419,6 +423,10 @@ static uint32_t get_line_length(struct paged_gap_buffer* pgb)
         }
         len++;
     }
+    // Restore cursor position by moving left len times
+    for (uint32_t i = 0; i < len; i++) {
+        pgb_move_left(pgb);
+    }
     return len;
 }
 
@@ -433,11 +441,8 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
 {
     uint32_t col = get_current_column(pgb);
 
-    // If already at first line, restore position and return
+    // If already at first line, return (cursor already restored by get_current_column)
     if (pgb->active_page->gap_start == 0 && !pgb->active_page->prev) {
-        for (uint32_t i = 0; i < col; i++) {
-            pgb_move_right(pgb);
-        }
         return;
     }
 
@@ -465,11 +470,6 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
 void pgb_move_down(struct paged_gap_buffer* pgb)
 {
     uint32_t col = get_current_column(pgb);
-
-    // Restore position to start of line
-    for (uint32_t i = 0; i < col; i++) {
-        pgb_move_right(pgb);
-    }
 
     // Move to next line
     while (1) {
