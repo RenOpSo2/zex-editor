@@ -207,13 +207,20 @@ void pgb_replace_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena
  * @dst: Destination buffer
  * @dst_size: Size of destination buffer (including null terminator)
  * @pgb: Source paged gap buffer
- * 
+ *
  * Copies all logical content into a flat string.
  * Truncates if dst_size is insufficient.
  * Always null-terminates the result.
  */
 void pgb_to_str(char* dst, size_t dst_size, const struct paged_gap_buffer* pgb)
 {
+    /* Guard against NULL outputs and the dst_size == 0 underflow. */
+    if (!dst || dst_size == 0) return;
+    if (!pgb) {
+        dst[0] = '\0';
+        return;
+    }
+
     uint32_t i = 0;
     struct page* p = pgb->head;
     while (p && i < dst_size - 1) {
@@ -224,6 +231,59 @@ void pgb_to_str(char* dst, size_t dst_size, const struct paged_gap_buffer* pgb)
         p = p->next;
     }
     dst[i] = '\0';
+}
+
+// ========== Streaming Reader ==========
+
+/**
+ * pgb_reader_init - Position a reader at the first logical byte
+ * @it: Reader to initialise
+ * @pgb: Buffer to read (may be NULL, yielding an empty stream)
+ */
+void pgb_reader_init(struct pgb_reader* it, const struct paged_gap_buffer* pgb)
+{
+    if (!it) return;
+    it->page = pgb ? pgb->head : NULL;
+    it->idx = 0;
+    it->phase = 0;
+}
+
+/**
+ * pgb_reader_next - Advance the reader by one logical byte
+ * @it: Reader initialised with pgb_reader_init
+ *
+ * Returns: Next stored byte (0..255), or -1 once every page is drained.
+ * Tolerates out-of-range gap indices defensively instead of reading
+ * past a page's storage.
+ */
+int pgb_reader_next(struct pgb_reader* it)
+{
+    if (!it) return -1;
+
+    for (;;) {
+        const struct page* p = it->page;
+        if (!p || it->phase >= 2) {
+            it->phase = 2;
+            return -1;
+        }
+
+        if (it->phase == 0) {
+            /* Segment before the gap. */
+            if (it->idx < p->gap_start && it->idx < PAGE_CAPACITY) {
+                return (unsigned char)p->data[it->idx++];
+            }
+            it->phase = 1;
+            it->idx = (p->gap_end <= PAGE_CAPACITY) ? p->gap_end : PAGE_CAPACITY;
+        } else {
+            /* Segment after the gap. */
+            if (it->idx < PAGE_CAPACITY) {
+                return (unsigned char)p->data[it->idx++];
+            }
+            it->page = p->next;
+            it->phase = 0;
+            it->idx = 0;
+        }
+    }
 }
 
 /**

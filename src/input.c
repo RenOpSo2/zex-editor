@@ -46,7 +46,8 @@ static void mouse_click_move(struct global* global, uint32_t screen_col, uint32_
 
     uint32_t scroll_offset = draw_get_scroll_offset();
     uint32_t target_line = (screen_row - 2) + scroll_offset;
-    int gutter = config_get_bool("show_line_numbers", 1) ? 6 : 0;
+    /* Same gutter width the renderer draws — keep hit-testing in sync. */
+    int gutter = (int)draw_gutter_width();
     int target_col = (int)screen_col - 1 - gutter;
     if (target_col < 0) target_col = 0;
 

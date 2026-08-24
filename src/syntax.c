@@ -3,6 +3,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <limits.h>
 #include <strings.h>
 
 // ANSI color codes - ALL GREEN as requested
@@ -151,39 +153,91 @@ static bool is_two_char_op(const char* s)
            (s[0] == '^' && s[1] == '=');
 }
 
+/*
+ * Growable output-buffer helpers used by the tokenisers.
+ *
+ * Failure policy: allocation failures latch a "failed" state by freeing the
+ * buffer and setting *result to NULL. Every helper checks that latch first,
+ * so after an OOM the remaining appends become no-ops and the public
+ * highlighting functions return NULL instead of crashing or leaking.
+ */
 static void append_color(char** result, int* result_len, int* result_cap, const char* color)
 {
-    int color_len = strlen(color);
+    if (!result || !*result) return; /* failed previously: stay inert */
+
+    int color_len = (int)strlen(color);
     while (*result_len + color_len >= *result_cap) {
-        *result_cap *= 2;
-        *result = realloc(*result, *result_cap);
+        if (*result_cap > INT_MAX / 2) goto fail;
+        int new_cap = (*result_cap > 0) ? *result_cap * 2 : 256;
+        char* grown = realloc(*result, (size_t)new_cap);
+        if (!grown) goto fail;
+        *result = grown;
+        *result_cap = new_cap;
     }
-    memcpy(*result + *result_len, color, color_len);
+    memcpy(*result + *result_len, color, (size_t)color_len);
     *result_len += color_len;
+    return;
+
+fail:
+    free(*result);
+    *result = NULL;
+    *result_len = 0;
+    *result_cap = 0;
 }
 
 static void append_text(char** result, int* result_len, int* result_cap, const char* text, int text_len)
 {
+    if (!result || !*result || !text || text_len <= 0) return;
+
     while (*result_len + text_len >= *result_cap) {
-        *result_cap *= 2;
-        *result = realloc(*result, *result_cap);
+        if (*result_cap > INT_MAX / 2) goto fail;
+        int new_cap = (*result_cap > 0) ? *result_cap * 2 : 256;
+        char* grown = realloc(*result, (size_t)new_cap);
+        if (!grown) goto fail;
+        *result = grown;
+        *result_cap = new_cap;
     }
-    memcpy(*result + *result_len, text, text_len);
+    memcpy(*result + *result_len, text, (size_t)text_len);
     *result_len += text_len;
+    return;
+
+fail:
+    free(*result);
+    *result = NULL;
+    *result_len = 0;
+    *result_cap = 0;
 }
 
 static void append_char(char** result, int* result_len, int* result_cap, char c)
 {
-    while (*result_len + 1 >= *result_cap) {
-        *result_cap *= 2;
-        *result = realloc(*result, *result_cap);
+    if (!result || !*result) return;
+
+    if (*result_len + 1 >= *result_cap) {
+        if (*result_cap > INT_MAX / 2) goto fail;
+        int new_cap = (*result_cap > 0) ? *result_cap * 2 : 256;
+        char* grown = realloc(*result, (size_t)new_cap);
+        if (!grown) goto fail;
+        *result = grown;
+        *result_cap = new_cap;
     }
     (*result)[*result_len] = c;
     *result_len += 1;
+    return;
+
+fail:
+    free(*result);
+    *result = NULL;
+    *result_len = 0;
+    *result_cap = 0;
 }
 
 char* syntax_highlight_python_line(const char* line, uint32_t line_len)
 {
+    /* Reject lengths whose colour-code headroom estimate would overflow. */
+    if (line_len >= (uint32_t)INT_MAX / 4u) {
+        return NULL;
+    }
+
     if (line_len == 0) {
         char* result = malloc(1);
         if (result) result[0] = '\0';
@@ -435,6 +489,11 @@ char* syntax_highlight_python_line(const char* line, uint32_t line_len)
 
 char* syntax_highlight_line(const char* line, uint32_t line_len)
 {
+    /* Reject lengths whose colour-code headroom estimate would overflow. */
+    if (line_len >= (uint32_t)INT_MAX / 4u) {
+        return NULL;
+    }
+
     if (line_len == 0) {
         char* result = malloc(1);
         if (result) result[0] = '\0';

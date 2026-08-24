@@ -1,0 +1,9 @@
+apakah kita fokus saja improve zex 
+
+seperti
+
+fitur search
+terminal rendering
+bug lebih sedikit
+fitur berfungsi lebih stabil
+
