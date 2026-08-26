@@ -1,8 +1,11 @@
 #ifndef RENDER_BUFFER_H
 #define RENDER_BUFFER_H
 
-#include "global.h"
 #include <stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * RenderBuffer - growable, bounds-checked byte buffer used to assemble a
@@ -22,7 +25,7 @@ typedef struct {
     char* data;
     size_t len;
     size_t cap;
-    enum bool overflowed;
+    int overflowed;
 } RenderBuffer;
 
 /**
@@ -39,14 +42,14 @@ void rb_clear(RenderBuffer* rb);
 
 /**
  * Ensure room for at least `extra` more bytes.
- * Returns ok, or err if the allocation failed (overflowed is set).
+ * Returns 0 on success, or 1 if the allocation failed (overflowed is set).
  */
-enum result rb_reserve(RenderBuffer* rb, size_t extra);
+int rb_reserve(RenderBuffer* rb, size_t extra);
 
 /** Append `size` bytes from src. Dropping an empty append is not an error. */
-enum result rb_append(RenderBuffer* rb, const void* src, size_t size);
-enum result rb_append_char(RenderBuffer* rb, char ch);
-enum result rb_append_str(RenderBuffer* rb, const char* str);
+int rb_append(RenderBuffer* rb, const void* src, size_t size);
+int rb_append_char(RenderBuffer* rb, char ch);
+int rb_append_str(RenderBuffer* rb, const char* str);
 
 /**
  * Write the buffered bytes to stdout, retrying on partial writes and
@@ -54,5 +57,9 @@ enum result rb_append_str(RenderBuffer* rb, const char* str);
  * dead terminal cannot be reported to anyway.
  */
 void rb_flush(RenderBuffer* rb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

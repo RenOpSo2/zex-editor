@@ -3,6 +3,10 @@
 
 #include "global.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Schema errors
 typedef struct {
     char key[64];
@@ -33,5 +37,9 @@ void config_watch(struct global* global);
 
 // Validate key & raw value string, returns 1 if valid, 0 if invalid
 int config_validate(const char* key, const char* raw_val, SchemaError* err_out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

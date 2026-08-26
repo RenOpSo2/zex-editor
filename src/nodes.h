@@ -3,6 +3,10 @@
 
 #include "global.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void pgb_init(struct paged_gap_buffer* pgb, Arena* arena);
 void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena);
 void pgb_delete(struct paged_gap_buffer* pgb);
@@ -53,5 +57,9 @@ void search_init(struct global* global);
 void search_find(struct global* global, const char* query);
 void search_next(struct global* global);
 void search_prev(struct global* global);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

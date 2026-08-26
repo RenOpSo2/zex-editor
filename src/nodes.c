@@ -869,7 +869,7 @@ void search_init(struct global* global)
  */
 static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                             uint32_t qlen, uint32_t start, uint32_t stop,
-                            enum bool want_last, uint32_t* count)
+                            bool want_last, uint32_t* count)
 {
     uint32_t pi[MAX_SEARCH_QUERY_LEN], j = 0, pos = 0, found = (uint32_t)-1;
     // Build prefix function for KMP

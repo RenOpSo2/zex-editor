@@ -3,9 +3,17 @@
 
 #include "global.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void term_init(void);
 void term_deinit(void);
 uint32_t term_read(char* dst);
 void term_update(struct term* term);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

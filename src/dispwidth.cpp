@@ -10,6 +10,8 @@
  * character split across a buffer page boundary).
  */
 
+extern "C" {
+
 int utf8_trail_count(unsigned char lead)
 {
     if (lead < 0x80) return 0;                       /* ASCII */
@@ -118,3 +120,5 @@ uint32_t char_width(const unsigned char* s, size_t avail, uint32_t col,
     if (consumed) *consumed = n;
     return codepoint_width(cp);
 }
+
+} // extern "C"

@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * Display-width abstraction.
  *
@@ -43,5 +47,9 @@ uint32_t codepoint_width(uint32_t cp);
  * caller can advance its stream by exactly that amount. */
 uint32_t char_width(const unsigned char* s, size_t avail, uint32_t col,
                     uint32_t tab_size, size_t* consumed);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,6 +1,8 @@
 # Compiler & Flags
 CC        = gcc
+CXX       = g++
 CFLAGS ?= -Wall -Wextra -Wpedantic -O2 -std=gnu99 -I.
+CXXFLAGS ?= -Wall -Wextra -Wpedantic -O2 -std=c++17 -I.
 .DEFAULT_GOAL := all
 
 # Directories
@@ -11,40 +13,32 @@ BINDIR    = bin
 # Target
 TARGET    = $(BINDIR)/zex
 
-# Source files (exclude cmd.c — removed in favour of Ctrl+S/Q)
-SRCS      = $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c)) libmemory/arena.c
-OBJS      = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c))) \
+# Sources
+C_SRCS    = $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c)) libmemory/arena.c
+CPP_SRCS  = $(wildcard $(SRCDIR)/*.cpp)
+C_OBJS    = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c))) \
             $(BUILDDIR)/libmemory/arena.o
-DEPS      = $(OBJS:.o=.d) $(BUILDDIR)/tests/test_undo.d $(BUILDDIR)/tests/test_0.2.0.d $(BUILDDIR)/tests/test_config.d $(BUILDDIR)/tests/stress_test.d $(BUILDDIR)/tests/edge_case_test.d $(BUILDDIR)/tests/test_cursor.d
+CPP_OBJS  = $(patsubst $(SRCDIR)/%.cpp, $(BUILDDIR)/%.o, $(CPP_SRCS))
+OBJS      = $(C_OBJS) $(CPP_OBJS)
+LIB_OBJS  = $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 
 # Test targets
-TEST_UNDO_SRCS = tests/test_undo.c
-TEST_UNDO_OBJS = $(BUILDDIR)/tests/test_undo.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
-TEST_UNDO_TARGET = $(BINDIR)/test_undo
+TEST_UNDO_TARGET       = $(BINDIR)/test_undo
+TEST_020_TARGET        = $(BINDIR)/test_0.2.0
+TEST_CONFIG_TARGET     = $(BINDIR)/test_config
+TEST_STRESS_TARGET     = $(BINDIR)/test_stress
+TEST_EDGE_TARGET       = $(BINDIR)/test_edge
+TEST_CURSOR_TARGET     = $(BINDIR)/test_cursor
+TEST_CPP_BRIDGE_TARGET = $(BINDIR)/test_cpp_bridge
 
-TEST_020_SRCS = tests/test_0.2.0.c
-TEST_020_OBJS = $(BUILDDIR)/tests/test_0.2.0.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
-TEST_020_TARGET = $(BINDIR)/test_0.2.0
-
-TEST_CONFIG_SRCS = tests/test_config.c
-TEST_CONFIG_OBJS = $(BUILDDIR)/tests/test_config.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
-TEST_CONFIG_TARGET = $(BINDIR)/test_config
-
-TEST_STRESS_SRCS = tests/stress_test.c
-TEST_STRESS_OBJS = $(BUILDDIR)/tests/stress_test.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
-TEST_STRESS_TARGET = $(BINDIR)/test_stress
-
-TEST_EDGE_SRCS = tests/edge_case_test.c
-TEST_EDGE_OBJS = $(BUILDDIR)/tests/edge_case_test.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
-TEST_EDGE_TARGET = $(BINDIR)/test_edge
-
-# Cursor accuracy regression test
-TEST_CURSOR_SRCS = tests/test_cursor.c
-TEST_CURSOR_OBJS = $(BUILDDIR)/tests/test_cursor.o $(filter-out $(BUILDDIR)/main.o, $(OBJS))
-TEST_CURSOR_TARGET = $(BINDIR)/test_cursor
+TEST_C_SRCS = tests/test_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c
+TEST_CPP_SRCS = tests/test_cpp_bridge.cpp
+TEST_C_OBJS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%.o, $(TEST_C_SRCS))
+TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
+DEPS = $(OBJS:.o=.d) $(TEST_C_OBJS:.o=.d) $(TEST_CPP_OBJS:.o=.d)
 
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor bench-search
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge bench-search check help
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -60,74 +54,44 @@ dirs:
 # Link executable
 $(TARGET): $(OBJS)
 	@echo "Linking $@..."
-	@$(CC) $(CFLAGS) $(OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $(OBJS) -o $@ $(LDFLAGS)
 	@echo "Build complete: $@"
 
-# Build undo test
-$(TEST_UNDO_TARGET): $(TEST_UNDO_OBJS)
+# Link tests
+$(TEST_UNDO_TARGET): $(BUILDDIR)/tests/test_undo.o $(LIB_OBJS)
 	@echo "Linking undo test..."
-	@$(CC) $(CFLAGS) $(TEST_UNDO_OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
-# Build 0.2.0 test
-$(TEST_020_TARGET): $(TEST_020_OBJS)
+$(TEST_020_TARGET): $(BUILDDIR)/tests/test_0.2.0.o $(LIB_OBJS)
 	@echo "Linking 0.2.0 test..."
-	@$(CC) $(CFLAGS) $(TEST_020_OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
-# Build config test
-$(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJS)
+$(TEST_CONFIG_TARGET): $(BUILDDIR)/tests/test_config.o $(LIB_OBJS)
 	@echo "Linking config test..."
-	@$(CC) $(CFLAGS) $(TEST_CONFIG_OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
-# Build stress test
-$(TEST_STRESS_TARGET): $(TEST_STRESS_OBJS)
+$(TEST_STRESS_TARGET): $(BUILDDIR)/tests/stress_test.o $(LIB_OBJS)
 	@echo "Linking stress test..."
-	@$(CC) $(CFLAGS) $(TEST_STRESS_OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
-# Build edge case test
-$(TEST_EDGE_TARGET): $(TEST_EDGE_OBJS)
+$(TEST_EDGE_TARGET): $(BUILDDIR)/tests/edge_case_test.o $(LIB_OBJS)
 	@echo "Linking edge case test..."
-	@$(CC) $(CFLAGS) $(TEST_EDGE_OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
-# Compile test objects
-$(BUILDDIR)/tests/test_undo.o: tests/test_undo.c
-	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-$(BUILDDIR)/tests/test_0.2.0.o: tests/test_0.2.0.c
-	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-$(BUILDDIR)/tests/test_config.o: tests/test_config.c
-	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-$(BUILDDIR)/tests/stress_test.o: tests/stress_test.c
-	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-$(BUILDDIR)/tests/edge_case_test.o: tests/edge_case_test.c
-	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
-
-$(TEST_CURSOR_TARGET): $(TEST_CURSOR_OBJS)
+$(TEST_CURSOR_TARGET): $(BUILDDIR)/tests/test_cursor.o $(LIB_OBJS)
 	@echo "Linking cursor test..."
-	@$(CC) $(CFLAGS) $(TEST_CURSOR_OBJS) -o $@ $(LDFLAGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
-$(BUILDDIR)/tests/test_cursor.o: tests/test_cursor.c
-	@mkdir -p $(dir $@)
-	@echo "Compiling $<..."
-	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+$(TEST_CPP_BRIDGE_TARGET): $(BUILDDIR)/tests/test_cpp_bridge.o $(LIB_OBJS)
+	@echo "Linking C++ bridge test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
 
 # Compile objects with dependency tracking
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c
@@ -135,10 +99,25 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILDDIR)/%.o: $(SRCDIR)/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILDDIR)/libmemory/%.o: libmemory/%.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILDDIR)/tests/%.o: tests/%.c
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
+$(BUILDDIR)/tests/%.o: tests/%.cpp
+	@mkdir -p $(dir $@)
+	@echo "Compiling $<..."
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
 
 # Include auto-generated dependencies
 -include $(DEPS)
@@ -154,10 +133,10 @@ clean:
 	@rm -rf $(BUILDDIR) $(BINDIR)
 	@echo "Clean complete!"
 
-# Format source code with clang-format
+# Format source code
 format:
 	@echo "Formatting source files..."
-	@clang-format -i $(SRCDIR)/*.c $(SRCDIR)/*.h
+	@clang-format -i $(SRCDIR)/*.c $(SRCDIR)/*.cpp $(SRCDIR)/*.h tests/*.c tests/*.cpp
 	@echo "Format complete!"
 
 # Format source code with astyle (K&R style, 4-space indent)
@@ -165,13 +144,14 @@ format-astyle:
 	@echo "Formatting source files with astyle (K&R, 4-space indent)..."
 	@astyle --style=kr --indent=spaces=4 --convert-tabs --pad-oper \
 	         --pad-header --unpad-paren --align-pointer=type \
-	         $(SRCDIR)/*.c $(SRCDIR)/*.h libmemory/*.c libmemory/*.h
+	         $(SRCDIR)/*.c $(SRCDIR)/*.cpp $(SRCDIR)/*.h \
+	         libmemory/*.c libmemory/*.h tests/*.c tests/*.cpp
 	@echo "Astyle format complete!"
 
 # Check formatting without changing files
 format-check:
 	@echo "Checking format..."
-	@clang-format --dry-run --Werror $(SRCDIR)/*.c $(SRCDIR)/*.h
+	@clang-format --dry-run --Werror $(SRCDIR)/*.c $(SRCDIR)/*.cpp $(SRCDIR)/*.h tests/*.c tests/*.cpp
 
 # Static analysis with cppcheck (if installed)
 check:
@@ -181,42 +161,50 @@ check:
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  all          : Build the project (default)"
-	@echo "  run          : Build and run"
-	@echo "  test         : Build and run all tests"
-	@echo "  test-stress  : Build and run stress test only"
-	@echo "  test-edge    : Build and run edge case test only"
-	@echo "  clean        : Remove build artifacts"
-	@echo "  format       : Format source with clang-format"
-	@echo "  format-astyle: Format source with astyle (K&R, 4-space indent)"
-	@echo "  format-check : Check formatting without changes"
-	@echo "  check        : Static analysis with cppcheck"
-	@echo "  help         : Show this help"
+	@echo "  all              : Build the project (default)"
+	@echo "  run              : Build and run"
+	@echo "  test             : Build and run all tests"
+	@echo "  test-stress      : Build and run stress test only"
+	@echo "  test-edge        : Build and run edge case test only"
+	@echo "  test-cursor      : Build and run cursor test only"
+	@echo "  test-cpp-bridge  : Build and run the C++ bridge smoke test"
+	@echo "  clean            : Remove build artifacts"
+	@echo "  format           : Format source with clang-format"
+	@echo "  format-astyle    : Format source with astyle (K&R, 4-space indent)"
+	@echo "  format-check     : Check formatting without changes"
+	@echo "  check            : Static analysis with cppcheck"
+	@echo "  help             : Show this help"
 
 # Individual test targets
 test-stress: dirs $(TEST_STRESS_TARGET)
 	@echo "Running stress test..."
-	@$(BINDIR)/test_stress
+	@$(TEST_STRESS_TARGET)
 
 test-edge: dirs $(TEST_EDGE_TARGET)
 	@echo "Running edge case test..."
-	@$(BINDIR)/test_edge
+	@$(TEST_EDGE_TARGET)
 
 test-cursor: dirs $(TEST_CURSOR_TARGET)
 	@echo "Running cursor accuracy test..."
-	@$(BINDIR)/test_cursor
+	@$(TEST_CURSOR_TARGET)
+
+test-cpp-bridge: dirs $(TEST_CPP_BRIDGE_TARGET)
+	@echo "Running C++ bridge smoke test..."
+	@$(TEST_CPP_BRIDGE_TARGET)
 
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET)
 	@echo "Running test_undo..."
-	@$(BINDIR)/test_undo
+	@$(TEST_UNDO_TARGET)
 	@echo "Running test_0.2.0..."
-	@$(BINDIR)/test_0.2.0
+	@$(TEST_020_TARGET)
 	@echo "Running test_config..."
-	@$(BINDIR)/test_config
+	@$(TEST_CONFIG_TARGET)
 	@echo "Running test_stress..."
-	@$(BINDIR)/test_stress
+	@$(TEST_STRESS_TARGET)
 	@echo "Running test_edge..."
-	@$(BINDIR)/test_edge
+	@$(TEST_EDGE_TARGET)
 	@echo "Running test_cursor..."
-	@$(BINDIR)/test_cursor
+	@$(TEST_CURSOR_TARGET)
+	@echo "Running test_cpp_bridge..."
+	@$(TEST_CPP_BRIDGE_TARGET)

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <sys/ioctl.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include "../libmemory/arena.h"
 
 #define arena_capacity (1 << 24)
@@ -37,10 +38,6 @@ enum result {
     ok = 0,
     err = 1,
 };
-enum bool {
-    false = 0,
-    true = 1,
-};
 
 struct page {
     char data[PAGE_CAPACITY];
@@ -69,7 +66,7 @@ struct global {
 
     // Selection: linear byte offsets into the logical content.
     // sel_anchor is fixed when selection starts; cursor end is computed live.
-    enum bool has_selection;
+    bool has_selection;
     uint32_t sel_anchor; // byte offset where selection started
 
     // Undo/redo stacks
@@ -79,7 +76,7 @@ struct global {
     uint32_t redo_count;
 
     // Search state
-    enum bool search_active;
+    bool search_active;
     char search_query[MAX_SEARCH_QUERY_LEN];
     uint32_t search_pos; // current match position
     uint32_t search_match_count; // number of matches found

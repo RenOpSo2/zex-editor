@@ -33,7 +33,7 @@ static unsigned char mouse_btn_byte = 0;
 static unsigned char mouse_x_byte = 0;
 
 // Search mode state
-static enum bool search_mode_active = false;
+static bool search_mode_active = false;
 static char search_input[MAX_SEARCH_QUERY_LEN] = {0};
 static uint32_t search_input_len = 0;
 
