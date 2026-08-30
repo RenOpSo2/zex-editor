@@ -24,6 +24,7 @@ LIB_OBJS  = $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 
 # Test targets
 TEST_UNDO_TARGET       = $(BINDIR)/test_undo
+TEST_ENHANCED_UNDO_TARGET = $(BINDIR)/test_enhanced_undo
 TEST_020_TARGET        = $(BINDIR)/test_0.2.0
 TEST_CONFIG_TARGET     = $(BINDIR)/test_config
 TEST_STRESS_TARGET     = $(BINDIR)/test_stress
@@ -31,7 +32,7 @@ TEST_EDGE_TARGET       = $(BINDIR)/test_edge
 TEST_CURSOR_TARGET     = $(BINDIR)/test_cursor
 TEST_CPP_BRIDGE_TARGET = $(BINDIR)/test_cpp_bridge
 
-TEST_C_SRCS = tests/test_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c
+TEST_C_SRCS = tests/test_undo.c tests/test_enhanced_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c
 TEST_CPP_SRCS = tests/test_cpp_bridge.cpp
 TEST_C_OBJS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%.o, $(TEST_C_SRCS))
 TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
@@ -60,6 +61,11 @@ $(TARGET): $(OBJS)
 # Link tests
 $(TEST_UNDO_TARGET): $(BUILDDIR)/tests/test_undo.o $(LIB_OBJS)
 	@echo "Linking undo test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_ENHANCED_UNDO_TARGET): $(BUILDDIR)/tests/test_enhanced_undo.o $(LIB_OBJS)
+	@echo "Linking enhanced undo test..."
 	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
@@ -168,6 +174,7 @@ help:
 	@echo "  test-edge        : Build and run edge case test only"
 	@echo "  test-cursor      : Build and run cursor test only"
 	@echo "  test-cpp-bridge  : Build and run the C++ bridge smoke test"
+	@echo "  test-enhanced-undo: Build and run enhanced undo test only"
 	@echo "  clean            : Remove build artifacts"
 	@echo "  format           : Format source with clang-format"
 	@echo "  format-astyle    : Format source with astyle (K&R, 4-space indent)"
@@ -192,10 +199,16 @@ test-cpp-bridge: dirs $(TEST_CPP_BRIDGE_TARGET)
 	@echo "Running C++ bridge smoke test..."
 	@$(TEST_CPP_BRIDGE_TARGET)
 
+test-enhanced-undo: dirs $(TEST_ENHANCED_UNDO_TARGET)
+	@echo "Running enhanced undo test..."
+	@$(TEST_ENHANCED_UNDO_TARGET)
+
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET)
 	@echo "Running test_undo..."
 	@$(TEST_UNDO_TARGET)
+	@echo "Running test_enhanced_undo..."
+	@$(TEST_ENHANCED_UNDO_TARGET)
 	@echo "Running test_0.2.0..."
 	@$(TEST_020_TARGET)
 	@echo "Running test_config..."

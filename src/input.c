@@ -124,10 +124,10 @@ static void auto_indent(struct global* g)
     }
     indent_str[indent_len] = '\0';
 
-    // Insert the indentation at the current cursor position
-    for (uint32_t j = 0; j < indent_len; j++) {
-        pgb_insert(&g->text, indent_str[j], &g->arena);
-        undo_save_insert(g, indent_str[j], cursor + j);
+    // Insert the indentation at the current cursor position using batch operation
+    if (indent_len > 0) {
+        pgb_insert_str(&g->text, indent_str, &g->arena);
+        undo_save_batch_insert(g, indent_str, indent_len, cursor);
     }
 }
 
@@ -404,7 +404,28 @@ enum result input_update(struct global* global)
                 uint32_t from, to;
                 sel_range(global, &from, &to);
                 pgb_copy_range(&global->clipboard, &global->text, from, to, &global->arena);
+                
+                // Save the deleted text for undo before deleting
+                char deleted_text[MAX_SEARCH_QUERY_LEN];
+                uint32_t deleted_len = 0;
+                
+                // Extract the text being deleted
+                struct pgb_reader reader;
+                pgb_reader_init(&reader, &global->text);
+                uint32_t current_pos = 0;
+                
+                while (current_pos < to && deleted_len < MAX_SEARCH_QUERY_LEN) {
+                    int ch = pgb_reader_next(&reader);
+                    if (ch == -1) break;
+                    
+                    if (current_pos >= from) {
+                        deleted_text[deleted_len++] = (char)ch;
+                    }
+                    current_pos++;
+                }
+                
                 pgb_delete_range(&global->text, from, to);
+                undo_save_batch_delete(global, deleted_text, deleted_len, from);
                 pgb_replace_str(&global->msg, "Cut.", &global->arena);
                 sel_clear(global);
             }
@@ -413,18 +434,63 @@ enum result input_update(struct global* global)
 
         // ---- Ctrl+V: paste ------------------------------------------------
         if (ch == CTRL_KEY('v')) {
-            // If something is selected, replace it with clipboard.
+            uint32_t paste_pos = pgb_cursor_pos(&global->text);
+            bool had_selection = global->has_selection;
+            
+            // If something is selected, save the old text for replace operation
+            char old_text[MAX_SEARCH_QUERY_LEN];
+            uint32_t old_len = 0;
+            
             if (global->has_selection) {
-                sel_delete(global);
+                uint32_t from, to;
+                sel_range(global, &from, &to);
+                
+                // Extract the text being replaced
+                struct pgb_reader reader;
+                pgb_reader_init(&reader, &global->text);
+                uint32_t current_pos = 0;
+                
+                while (current_pos < to && old_len < MAX_SEARCH_QUERY_LEN) {
+                    int ch = pgb_reader_next(&reader);
+                    if (ch == -1) break;
+                    
+                    if (current_pos >= from) {
+                        old_text[old_len++] = (char)ch;
+                    }
+                    current_pos++;
+                }
+                
+                // Delete the selection directly (without undo, since we'll save as replace)
+                pgb_delete_range(&global->text, from, to);
+                sel_clear(global);
             }
+            
+            // Collect clipboard content for undo
+            char clipboard_content[MAX_SEARCH_QUERY_LEN];
+            uint32_t clipboard_len = 0;
+            
             struct page* p = global->clipboard.head;
-            while (p) {
-                for (uint32_t j = 0; j < p->gap_start; j++)
+            while (p && clipboard_len < MAX_SEARCH_QUERY_LEN) {
+                for (uint32_t j = 0; j < p->gap_start && clipboard_len < MAX_SEARCH_QUERY_LEN; j++) {
+                    clipboard_content[clipboard_len++] = p->data[j];
                     pgb_insert(&global->text, p->data[j], &global->arena);
-                for (uint32_t j = p->gap_end; j < PAGE_CAPACITY; j++)
+                }
+                for (uint32_t j = p->gap_end; j < PAGE_CAPACITY && clipboard_len < MAX_SEARCH_QUERY_LEN; j++) {
+                    clipboard_content[clipboard_len++] = p->data[j];
                     pgb_insert(&global->text, p->data[j], &global->arena);
+                }
                 p = p->next;
             }
+            
+            // Save as replace operation if there was a selection, otherwise as insert
+            if (clipboard_len > 0) {
+                if (had_selection) {
+                    undo_save_replace(global, clipboard_content, clipboard_len, old_text, old_len, paste_pos);
+                } else {
+                    undo_save_batch_insert(global, clipboard_content, clipboard_len, paste_pos);
+                }
+            }
+            
             pgb_replace_str(&global->msg, "Pasted.", &global->arena);
             continue;
         }

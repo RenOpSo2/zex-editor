@@ -2,6 +2,7 @@
 #define NODES_H
 
 #include "global.h"
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,6 +52,13 @@ void undo_perform(struct global* global);
 void redo_perform(struct global* global);
 void undo_save_insert(struct global* global, char ch, uint32_t pos);
 void undo_save_delete(struct global* global, char ch, uint32_t pos);
+void undo_save_replace(struct global* global, const char* new_text, uint32_t new_len, 
+                       const char* old_text, uint32_t old_len, uint32_t pos);
+void undo_save_batch_insert(struct global* global, const char* text, uint32_t len, uint32_t pos);
+void undo_save_batch_delete(struct global* global, const char* text, uint32_t len, uint32_t pos);
+void undo_clear_history(struct global* global);
+bool undo_can_undo(struct global* global);
+bool undo_can_redo(struct global* global);
 
 // Search functions
 void search_init(struct global* global);

@@ -29,9 +29,11 @@ enum action_type {
 
 struct action {
     enum action_type type;
-    char data[MAX_SEARCH_QUERY_LEN];  // Store inserted/deleted text
+    char data[MAX_SEARCH_QUERY_LEN];  // Store inserted/deleted/replaced text
+    char old_data[MAX_SEARCH_QUERY_LEN]; // Store original text for replace operations
     uint32_t pos;    // Cursor position
     uint32_t len;    // Length of data
+    uint32_t old_len; // Length of old data for replace operations
 };
 
 enum result {
