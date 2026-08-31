@@ -42,9 +42,7 @@ static uint32_t last_scroll_offset = 0;
 static uint32_t draw_tab_size(void)
 {
     int ts = (int)config_get_number("tabsize", 4);
-    if (ts < 1) ts = 1;
-    if (ts > 16) ts = 16;
-    return (uint32_t)ts;
+    return (uint32_t)(ts < 1 ? 1 : ts > 16 ? 16 : ts);
 }
 
 /**
@@ -82,7 +80,7 @@ static void append_sanitized(RenderBuffer* out, const char* s, size_t len, uint3
 
         unsigned char b = ch[0];
         if (b < 32 || b == 127) {
-            if (*budget < 2) break; /* caret pair does not fit */
+            if (*budget < 2) break;
             char pair[2];
             caret_bytes(b, pair);
             if (rb_append(out, pair, 2) != ok) return;
@@ -107,7 +105,6 @@ static void draw_line_number(uint32_t line_num)
     char buf[16];
     int n = snprintf(buf, sizeof(buf), "%5u ", (unsigned)(line_num + 1u));
     if (n > 0) {
-        /* Never let a huge counter widen the gutter past its fixed width. */
         size_t out = ((size_t)n < sizeof(buf)) ? (size_t)n : sizeof(buf);
         if (out > draw_gutter_width()) out = draw_gutter_width();
         rb_append(&rb, buf, out);
@@ -146,9 +143,7 @@ struct doc_stats {
 static void compute_doc_stats(const struct paged_gap_buffer* pgb, uint32_t cursor_pos, struct doc_stats* st)
 {
     uint32_t tab_size = draw_tab_size();
-    uint32_t line = 0, col = 0;
-    uint32_t newlines = 0;
-    uint32_t len = 0;
+    uint32_t line = 0, col = 0, newlines = 0, len = 0;
     int ends_with_nl = 1;
 
     struct pgb_reader it;
@@ -157,8 +152,6 @@ static void compute_doc_stats(const struct paged_gap_buffer* pgb, uint32_t curso
     int c;
     unsigned char ch[4];
     while ((c = pgb_reader_next(&it)) >= 0) {
-        /* Gather a whole character so multibyte UTF-8 is counted as one
-         * display unit instead of one column per byte. */
         size_t got = 0;
         ch[got++] = (unsigned char)c;
         int extra = utf8_trail_count((unsigned char)c);
@@ -216,14 +209,14 @@ static uint32_t compute_scroll_offset(uint32_t cursor_line, uint32_t size_y)
 static void line_store_char(const unsigned char* ch, size_t n, uint32_t* disp_cols,
                             uint32_t tab_size, uint32_t width)
 {
-    if (*disp_cols >= width) return; /* rest of the line is clipped */
+    if (*disp_cols >= width) return;
 
     unsigned char b = ch[0];
 
     if (b == '\t') {
         uint32_t spaces = tab_size - (*disp_cols % tab_size);
         while (spaces-- > 0) {
-            if (*disp_cols >= width) break; /* clip a partially fitting tab */
+            if (*disp_cols >= width) break;
             if (rb_append_char(&line_disp, ' ') != ok) return;
             (*disp_cols)++;
         }
@@ -231,7 +224,7 @@ static void line_store_char(const unsigned char* ch, size_t n, uint32_t* disp_co
     }
 
     if (b < 32 || b == 127) {
-        if (width - *disp_cols < 2) return; /* caret pair would overflow */
+        if (width - *disp_cols < 2) return;
         char pair[2];
         caret_bytes(b, pair);
         if (rb_append(&line_disp, pair, 2) != ok) return;
@@ -239,12 +232,11 @@ static void line_store_char(const unsigned char* ch, size_t n, uint32_t* disp_co
         return;
     }
 
-    /* Normal / UTF-8 character: count by display width, clip atomically. */
     uint32_t cp;
     (void)utf8_decode(ch, n, &cp);
     uint32_t w = codepoint_width(cp);
     if (*disp_cols + w > width) {
-        *disp_cols = width; /* line is clipped; stop storing the rest */
+        *disp_cols = width;
         return;
     }
     if (rb_append(&line_disp, (const char*)ch, n) != ok) return;
@@ -257,10 +249,6 @@ static void emit_visible_line(uint32_t line_num, int language)
     draw_line_number(line_num);
 
     if (language != 0 && line_disp.len > 0) {
-        /*
-         * NUL-terminate the scratch buffer so the tokeniser can never run
-         * off the end, but hand it an explicit length all the same.
-         */
         (void)rb_append_char(&line_disp, '\0');
         uint32_t body_len = (uint32_t)line_disp.len - 1u;
 
@@ -271,7 +259,6 @@ static void emit_visible_line(uint32_t line_num, int language)
             rb_append(&rb, hl, strlen(hl));
             free(hl);
         } else {
-            /* Highlighter failed (OOM): degrade to plain text, never blank. */
             rb_append(&rb, line_disp.data, body_len);
         }
     } else {
@@ -289,9 +276,7 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
                                  uint32_t width, int language)
 {
     uint32_t tab_size = draw_tab_size();
-    uint32_t rendered = 0;
-    uint32_t line_no = 0;
-    uint32_t disp_cols = 0;
+    uint32_t rendered = 0, line_no = 0, disp_cols = 0;
     int storing = 0;
 
     rb_clear(&line_disp);
@@ -312,8 +297,6 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
             continue;
         }
 
-        /* Gather a whole character before storing, so multibyte UTF-8 is
-         * handled (and clipped) as a single display unit. */
         size_t got = 0;
         ch[got++] = (unsigned char)c;
         int extra = utf8_trail_count((unsigned char)c);
@@ -333,7 +316,6 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
         }
     }
 
-    /* Final line without a trailing newline. */
     if (storing) {
         emit_visible_line(line_no, language);
         rendered++;
@@ -352,7 +334,7 @@ static void position_cursor(uint32_t cursor_line, uint32_t cursor_col, uint32_t 
 
     uint32_t gutter = draw_gutter_width();
     uint32_t avail = (cols > gutter) ? cols - gutter : 1;
-    uint32_t disp_col = (cursor_col < avail) ? cursor_col : avail - 1; /* pin to clipped lines */
+    uint32_t disp_col = (cursor_col < avail) ? cursor_col : avail - 1;
 
     char seq[32];
     int n = snprintf(seq, sizeof(seq), "\x1b[%u;%uH", (unsigned)(vis_line + 2u), (unsigned)(disp_col + gutter + 1u));
@@ -372,10 +354,7 @@ static void draw_text(const struct paged_gap_buffer* pgb, uint32_t rows, uint32_
     compute_doc_stats(pgb, pgb_cursor_pos(pgb), &st);
 
     uint32_t scroll_offset = compute_scroll_offset(st.cur_line, rows);
-
-    int language = 0;
-    if (filepath && filepath[0] != '\0') language = syntax_get_language(filepath);
-
+    int language = (filepath && filepath[0] != '\0') ? syntax_get_language(filepath) : 0;
     uint32_t gutter = draw_gutter_width();
     uint32_t width = (cols > gutter) ? cols - gutter : 1;
 
@@ -403,19 +382,15 @@ static void draw_status(struct global* global, uint32_t cols)
     rb_append(&rb, prefix, sizeof(prefix) - 1);
     budget -= (budget > (sizeof(prefix) - 1)) ? (uint32_t)(sizeof(prefix) - 1) : budget;
 
-    /* Filename: leave a little room for the message zone. */
-    {
-        uint32_t name_budget = (budget > 10u) ? budget - 10u : 0;
-        uint32_t before = name_budget;
-        if (global->filepath[0] != '\0') {
-            append_sanitized(&rb, global->filepath, strlen(global->filepath), &name_budget);
-        } else {
-            append_sanitized(&rb, "[No file]", sizeof("[No file]") - 1, &name_budget);
-        }
-        budget -= before - name_budget;
+    uint32_t name_budget = (budget > 10u) ? budget - 10u : 0;
+    uint32_t before = name_budget;
+    if (global->filepath[0] != '\0') {
+        append_sanitized(&rb, global->filepath, strlen(global->filepath), &name_budget);
+    } else {
+        append_sanitized(&rb, "[No file]", sizeof("[No file]") - 1, &name_budget);
     }
+    budget -= before - name_budget;
 
-    /* Flash message in yellow (if any): next priority. */
     if (global->msg.head && budget > 0) {
         char msg_buf[256];
         pgb_to_str(msg_buf, sizeof(msg_buf), &global->msg);
@@ -431,7 +406,6 @@ static void draw_status(struct global* global, uint32_t cols)
         }
     }
 
-    /* Key hints last: they absorb whatever width remains. */
     if (budget > 0) {
         uint32_t indent_w = (budget > (sizeof(indent) - 1)) ? (uint32_t)(sizeof(indent) - 1) : budget;
         budget -= indent_w;
@@ -442,7 +416,6 @@ static void draw_status(struct global* global, uint32_t cols)
         append_sanitized(&rb, hints, sizeof(hints) - 1, &hints_budget);
     }
 
-    /* CR-LF explicitly: never rely on the terminal's ONLCR translation. */
     RB_ESC("\x1b[0m\x1b[39;49m\x1b[K\r\n");
 }
 
