@@ -785,30 +785,23 @@ void undo_perform(struct global* global)
 
     // Perform undo
     if (act->type == action_insert) {
-        // Undo insert = delete the character that was inserted
-        // Move to position AFTER the insertion (cursor is now after the char)
-        pgb_move_to_pos(&global->text, act->pos + 1);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_delete(&global->text);
-        }
+        // Undo insert = delete the text that was inserted
+        // Use batch delete for efficiency with large text
+        pgb_delete_range(&global->text, act->pos, act->pos + act->len);
     } else if (act->type == action_delete) {
-        // Undo delete = insert the character that was deleted
+        // Undo delete = insert the text that was deleted
         // Move to position where it was deleted, then insert
         pgb_move_to_pos(&global->text, act->pos);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_insert(&global->text, act->data[i], &global->arena);
-        }
+        // Use batch insert for efficiency with large text
+        pgb_insert_str(&global->text, act->data, &global->arena);
     } else if (act->type == action_replace) {
         // Undo replace = restore the original text
         pgb_move_to_pos(&global->text, act->pos);
-        // Delete new text
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_delete(&global->text);
-        }
-        // Insert old text
-        for (uint32_t i = 0; i < act->old_len; i++) {
-            pgb_insert(&global->text, act->old_data[i], &global->arena);
-        }
+        // Delete new text using batch delete
+        pgb_delete_range(&global->text, act->pos, act->pos + act->len);
+        // Insert old text using batch insert
+        pgb_move_to_pos(&global->text, act->pos);
+        pgb_insert_str(&global->text, act->old_data, &global->arena);
     }
 
     global->undo_count--;
@@ -828,29 +821,22 @@ void redo_perform(struct global* global)
 
     // Perform redo
     if (act->type == action_insert) {
-        // Redo insert = insert the character back at original position
+        // Redo insert = insert the text back at original position
         pgb_move_to_pos(&global->text, act->pos);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_insert(&global->text, act->data[i], &global->arena);
-        }
+        // Use batch insert for efficiency with large text
+        pgb_insert_str(&global->text, act->data, &global->arena);
     } else if (act->type == action_delete) {
-        // Redo delete = delete the character again
-        // Move to position after the character, then delete
-        pgb_move_to_pos(&global->text, act->pos + 1);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_delete(&global->text);
-        }
+        // Redo delete = delete the text again
+        // Use batch delete for efficiency with large text
+        pgb_delete_range(&global->text, act->pos, act->pos + act->len);
     } else if (act->type == action_replace) {
         // Redo replace = apply the replacement again
         pgb_move_to_pos(&global->text, act->pos);
-        // Delete old text
-        for (uint32_t i = 0; i < act->old_len; i++) {
-            pgb_delete(&global->text);
-        }
-        // Insert new text
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_insert(&global->text, act->data[i], &global->arena);
-        }
+        // Delete old text using batch delete
+        pgb_delete_range(&global->text, act->pos, act->pos + act->old_len);
+        // Insert new text using batch insert
+        pgb_move_to_pos(&global->text, act->pos);
+        pgb_insert_str(&global->text, act->data, &global->arena);
     }
 
     // Move action back to undo stack

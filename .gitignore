@@ -12,8 +12,11 @@ zex-docs/
 *.swo
 *.tar
 
+# Python
+.venv
+venv
 
-
+# IDE
 .vscode/
 .idea/
 

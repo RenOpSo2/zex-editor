@@ -47,8 +47,8 @@ int main() {
     printf("After undo - cursor pos: %u\n", pgb_cursor_pos(&global.text));
     printf("Undo count: %u (should be 0)\n", global.undo_count);
     assert(global.undo_count == 0);
-    // Note: Batch undo may need refinement for perfect large text restoration
-    printf("Note: Batch undo for large text may need refinement\n");
+    assert(strlen(buffer) == 0); // Should now correctly remove all 1000 characters
+    printf("✓ Batch undo correctly removes all 1000 characters\n");
     
     // Test 3: Redo large insert
     printf("\nTest 3: Redo large insert\n");
@@ -60,7 +60,8 @@ int main() {
     printf("After redo - cursor pos: %u\n", pgb_cursor_pos(&global.text));
     printf("Undo count: %u (should be 1)\n", global.undo_count);
     assert(global.undo_count == 1);
-    printf("Note: Batch redo for large text may need refinement\n");
+    assert(strlen(buffer) == 1000); // Should now correctly restore all 1000 characters
+    printf("✓ Batch redo correctly restores all 1000 characters\n");
     
     // Test 4: Test near the limit (4000 characters)
     printf("\nTest 4: Very large operation (4000 characters)\n");
@@ -83,15 +84,76 @@ int main() {
     assert(global.undo_count == 1);
     assert(strlen(buffer) == 4000);
     
-    // Test 5: Check that the data was stored correctly
-    printf("\nTest 5: Verify stored data in undo stack\n");
-    printf("Checking that undo stack can hold 4000 characters\n");
-    assert(global.undo_count == 1);
-    printf("✓ Undo stack successfully stores 4000 characters\n");
+    // Test 5: Undo very large insert
+    printf("\nTest 5: Undo very large insert\n");
+    undo_perform(&global);
+    pgb_to_str(buffer, sizeof(buffer), &global.text);
+    printf("After undo: length = %zu\n", strlen(buffer));
+    printf("Undo count: %u (should be 0)\n", global.undo_count);
+    assert(global.undo_count == 0);
+    assert(strlen(buffer) == 0); // Should correctly remove all 4000 characters
+    printf("✓ Batch undo correctly removes all 4000 characters\n");
     
-    printf("\n✓ Large text undo/redo storage tests passed!\n");
-    printf("✓ System can now store up to 4096 characters per action (was 256)\n");
-    printf("✓ Buffer size increased from 256 to 4096 bytes\n");
+    // Test 6: Large replace operation
+    printf("\nTest 6: Large replace operation (2000 characters)\n");
+    pgb_clear(&global.text);
+    undo_clear_history(&global);
+    
+    // Insert initial text
+    char old_large[4096];
+    for (int i = 0; i < 2000; i++) {
+        old_large[i] = 'X';
+    }
+    old_large[2000] = '\0';
+    
+    pgb_insert_str(&global.text, old_large, &global.arena);
+    pos = 0;
+    
+    // Replace with new text
+    char new_large[4096];
+    for (int i = 0; i < 2000; i++) {
+        new_large[i] = 'Y';
+    }
+    new_large[2000] = '\0';
+    
+    // Simulate replace: delete old, insert new using batch operations
+    pgb_delete_range(&global->text, 0, 2000);
+    pgb_insert_str(&global.text, new_large, &global.arena);
+    
+    undo_save_replace(&global, new_large, 2000, old_large, 2000, pos);
+    
+    pgb_to_str(buffer, sizeof(buffer), &global.text);
+    printf("After large replace: length = %zu\n", strlen(buffer));
+    printf("Undo count: %u (should be 1)\n", global.undo_count);
+    assert(global.undo_count == 1);
+    assert(strlen(buffer) == 2000);
+    
+    // Test 7: Undo large replace
+    printf("\nTest 7: Undo large replace\n");
+    undo_perform(&global);
+    pgb_to_str(buffer, sizeof(buffer), &global.text);
+    printf("After undo: length = %zu\n", strlen(buffer));
+    printf("Undo count: %u (should be 0)\n", global.undo_count);
+    assert(global.undo_count == 0);
+    assert(strlen(buffer) == 2000); // Should restore old text
+    assert(buffer[0] == 'X'); // Should be the old text
+    printf("✓ Batch undo correctly restores 2000 characters of old text\n");
+    
+    // Test 8: Redo large replace
+    printf("\nTest 8: Redo large replace\n");
+    redo_perform(&global);
+    pgb_to_str(buffer, sizeof(buffer), &global.text);
+    printf("After redo: length = %zu\n", strlen(buffer));
+    printf("Undo count: %u (should be 1)\n", global.undo_count);
+    assert(global.undo_count == 1);
+    assert(strlen(buffer) == 2000); // Should restore new text
+    assert(buffer[0] == 'Y'); // Should be the new text
+    printf("✓ Batch redo correctly restores 2000 characters of new text\n");
+    
+    printf("\n✓ All large text undo/redo tests passed!\n");
+    printf("✓ System can now handle up to 4096 characters per action (was 256)\n");
+    printf("✓ Batch operations work correctly for insert, delete, and replace\n");
+    printf("✓ Undo stack properly stores and restores large text blocks\n");
     
     return 0;
 }
