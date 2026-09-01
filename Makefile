@@ -14,9 +14,9 @@ BINDIR    = bin
 TARGET    = $(BINDIR)/zex
 
 # Sources
-C_SRCS    = $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c)) libmemory/arena.c
+C_SRCS    = $(wildcard $(SRCDIR)/*.c) libmemory/arena.c
 CPP_SRCS  = $(wildcard $(SRCDIR)/*.cpp)
-C_OBJS    = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(filter-out $(SRCDIR)/cmd.c, $(wildcard $(SRCDIR)/*.c))) \
+C_OBJS    = $(patsubst $(SRCDIR)/%.c, $(BUILDDIR)/%.o, $(wildcard $(SRCDIR)/*.c)) \
             $(BUILDDIR)/libmemory/arena.o
 CPP_OBJS  = $(patsubst $(SRCDIR)/%.cpp, $(BUILDDIR)/%.o, $(CPP_SRCS))
 OBJS      = $(C_OBJS) $(CPP_OBJS)
@@ -24,21 +24,27 @@ LIB_OBJS  = $(filter-out $(BUILDDIR)/main.o, $(OBJS))
 
 # Test targets
 TEST_UNDO_TARGET       = $(BINDIR)/test_undo
+TEST_ENHANCED_UNDO_TARGET = $(BINDIR)/test_enhanced_undo
+TEST_LARGE_UNDO_TARGET = $(BINDIR)/test_large_undo
 TEST_020_TARGET        = $(BINDIR)/test_0.2.0
 TEST_CONFIG_TARGET     = $(BINDIR)/test_config
 TEST_STRESS_TARGET     = $(BINDIR)/test_stress
 TEST_EDGE_TARGET       = $(BINDIR)/test_edge
 TEST_CURSOR_TARGET     = $(BINDIR)/test_cursor
 TEST_CPP_BRIDGE_TARGET = $(BINDIR)/test_cpp_bridge
+TEST_FILE_IO_TARGET    = $(BINDIR)/test_file_io
+TEST_SEARCH_TARGET     = $(BINDIR)/test_search
+TEST_SELECTION_TARGET  = $(BINDIR)/test_selection
+TEST_CMD_TARGET        = $(BINDIR)/test_cmd
 
-TEST_C_SRCS = tests/test_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c
+TEST_C_SRCS = tests/test_undo.c tests/test_enhanced_undo.c tests/test_large_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c tests/test_file_io.c tests/test_search.c tests/test_selection.c tests/test_cmd.c
 TEST_CPP_SRCS = tests/test_cpp_bridge.cpp
 TEST_C_OBJS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%.o, $(TEST_C_SRCS))
 TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
 DEPS = $(OBJS:.o=.d) $(TEST_C_OBJS:.o=.d) $(TEST_CPP_OBJS:.o=.d)
 
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge bench-search check help
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd bench-search check help release
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -60,6 +66,16 @@ $(TARGET): $(OBJS)
 # Link tests
 $(TEST_UNDO_TARGET): $(BUILDDIR)/tests/test_undo.o $(LIB_OBJS)
 	@echo "Linking undo test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_ENHANCED_UNDO_TARGET): $(BUILDDIR)/tests/test_enhanced_undo.o $(LIB_OBJS)
+	@echo "Linking enhanced undo test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_LARGE_UNDO_TARGET): $(BUILDDIR)/tests/test_large_undo.o $(LIB_OBJS)
+	@echo "Linking large undo test..."
 	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
@@ -90,6 +106,26 @@ $(TEST_CURSOR_TARGET): $(BUILDDIR)/tests/test_cursor.o $(LIB_OBJS)
 
 $(TEST_CPP_BRIDGE_TARGET): $(BUILDDIR)/tests/test_cpp_bridge.o $(LIB_OBJS)
 	@echo "Linking C++ bridge test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_FILE_IO_TARGET): $(BUILDDIR)/tests/test_file_io.o $(LIB_OBJS)
+	@echo "Linking file I/O test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_SEARCH_TARGET): $(BUILDDIR)/tests/test_search.o $(LIB_OBJS)
+	@echo "Linking search test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_SELECTION_TARGET): $(BUILDDIR)/tests/test_selection.o $(LIB_OBJS)
+	@echo "Linking selection test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_CMD_TARGET): $(BUILDDIR)/tests/test_cmd.o $(LIB_OBJS)
+	@echo "Linking command test..."
 	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
@@ -158,6 +194,22 @@ check:
 	@echo "Running cppcheck..."
 	@cppcheck --enable=all --suppress=missingIncludeSystem $(SRCDIR)/
 
+# Release target
+release: clean all test
+	@echo "Creating release..."
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION must be set. Usage: make release VERSION=x.y.z"; \
+		exit 1; \
+	fi
+	@echo "Building release v$(VERSION)..."
+	@mkdir -p release
+	@cp $(TARGET) release/zex
+	@strip release/zex
+	@cd release && tar -czf zex-$(VERSION)-$$(uname -m)-$$(uname -s | tr '[:upper:]' '[:lower:]').tar.gz zex
+	@echo "Release created: release/zex-$(VERSION)-$$(uname -m)-$$(uname -s | tr '[:upper:]' '[:lower:]').tar.gz"
+	@echo "Binary size: $$(du -h release/zex | cut -f1)"
+	@echo "Release v$(VERSION) complete!"
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -168,11 +220,18 @@ help:
 	@echo "  test-edge        : Build and run edge case test only"
 	@echo "  test-cursor      : Build and run cursor test only"
 	@echo "  test-cpp-bridge  : Build and run the C++ bridge smoke test"
+	@echo "  test-enhanced-undo: Build and run enhanced undo test only"
+	@echo "  test-large-undo  : Build and run large undo test only"
+	@echo "  test-file-io     : Build and run file I/O test only"
+	@echo "  test-search      : Build and run search test only"
+	@echo "  test-selection   : Build and run selection test only"
+	@echo "  test-cmd         : Build and run command test only"
 	@echo "  clean            : Remove build artifacts"
 	@echo "  format           : Format source with clang-format"
 	@echo "  format-astyle    : Format source with astyle (K&R, 4-space indent)"
 	@echo "  format-check     : Check formatting without changes"
 	@echo "  check            : Static analysis with cppcheck"
+	@echo "  release          : Create release (VERSION=x.y.z required)"
 	@echo "  help             : Show this help"
 
 # Individual test targets
@@ -192,10 +251,38 @@ test-cpp-bridge: dirs $(TEST_CPP_BRIDGE_TARGET)
 	@echo "Running C++ bridge smoke test..."
 	@$(TEST_CPP_BRIDGE_TARGET)
 
+test-enhanced-undo: dirs $(TEST_ENHANCED_UNDO_TARGET)
+	@echo "Running enhanced undo test..."
+	@$(TEST_ENHANCED_UNDO_TARGET)
+
+test-large-undo: dirs $(TEST_LARGE_UNDO_TARGET)
+	@echo "Running large undo test..."
+	@$(TEST_LARGE_UNDO_TARGET)
+
+test-file-io: dirs $(TEST_FILE_IO_TARGET)
+	@echo "Running file I/O test..."
+	@$(TEST_FILE_IO_TARGET)
+
+test-search: dirs $(TEST_SEARCH_TARGET)
+	@echo "Running search test..."
+	@$(TEST_SEARCH_TARGET)
+
+test-selection: dirs $(TEST_SELECTION_TARGET)
+	@echo "Running selection test..."
+	@$(TEST_SELECTION_TARGET)
+
+test-cmd: dirs $(TEST_CMD_TARGET)
+	@echo "Running command test..."
+	@$(TEST_CMD_TARGET)
+
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET) $(TEST_FILE_IO_TARGET) $(TEST_SEARCH_TARGET) $(TEST_SELECTION_TARGET) $(TEST_CMD_TARGET)
 	@echo "Running test_undo..."
 	@$(TEST_UNDO_TARGET)
+	@echo "Running test_enhanced_undo..."
+	@$(TEST_ENHANCED_UNDO_TARGET)
+	@echo "Running test_large_undo..."
+	@$(TEST_LARGE_UNDO_TARGET)
 	@echo "Running test_0.2.0..."
 	@$(TEST_020_TARGET)
 	@echo "Running test_config..."
@@ -208,3 +295,11 @@ test: dirs $(TEST_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_S
 	@$(TEST_CURSOR_TARGET)
 	@echo "Running test_cpp_bridge..."
 	@$(TEST_CPP_BRIDGE_TARGET)
+	@echo "Running test_file_io..."
+	@$(TEST_FILE_IO_TARGET)
+	@echo "Running test_search..."
+	@$(TEST_SEARCH_TARGET)
+	@echo "Running test_selection..."
+	@$(TEST_SELECTION_TARGET)
+	@echo "Running test_cmd..."
+	@$(TEST_CMD_TARGET)

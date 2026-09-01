@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 
 #define VERSION "2.0.1"
@@ -39,7 +40,8 @@ int main(int argc, char* argv[])
     editor_init(&global, filepath);
     while (1) {
         config_watch(&global);
-        if (editor_update(&global) != ok) {
+        enum result res = editor_update(&global);
+        if (res != ok) {
             break;
         }
     }

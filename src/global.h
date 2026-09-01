@@ -14,7 +14,7 @@
 #define PAGE_CAPACITY 4096
 #define UNDO_STACK_SIZE 100
 #define MAX_CONFIG_ENTRIES 32
-#define MAX_SEARCH_QUERY_LEN 256
+#define MAX_SEARCH_QUERY_LEN 4096
 #define MAX_FILEPATH_LEN 256
 
 // Ctrl+key macros
@@ -29,9 +29,11 @@ enum action_type {
 
 struct action {
     enum action_type type;
-    char data[MAX_SEARCH_QUERY_LEN];  // Store inserted/deleted text
+    char data[MAX_SEARCH_QUERY_LEN];  // Store inserted/deleted/replaced text
+    char old_data[MAX_SEARCH_QUERY_LEN]; // Store original text for replace operations
     uint32_t pos;    // Cursor position
     uint32_t len;    // Length of data
+    uint32_t old_len; // Length of old data for replace operations
 };
 
 enum result {

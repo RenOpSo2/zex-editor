@@ -12,15 +12,14 @@ zex-docs/
 *.swo
 *.tar
 
-
-
+# IDE
 .vscode/
 .idea/
 
 # OS files
 .DS_Store
 Thumbs.db
-
+ 
 # Core dumps
 core
 *.core

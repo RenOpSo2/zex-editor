@@ -715,11 +715,11 @@ void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
 /**
  * undo_save_action - Save an action to the undo stack
  * @global: Global state containing undo/redo stacks
- * @type: Action type (insert or delete)
+ * @type: Action type (insert, delete, or replace)
  * @data: Data associated with action
  * @len: Length of data
  * @pos: Position where action occurred
- * 
+ *
  * Internal helper for undo/redo tracking.
  */
 static void undo_save_action(struct global* global, enum action_type type, const char* data, uint32_t len, uint32_t pos)
@@ -730,6 +730,7 @@ static void undo_save_action(struct global* global, enum action_type type, const
     act->type = type;
     act->len = len;
     act->pos = pos;
+    act->old_len = 0; // Initialize old_len for non-replace actions
 
     // Copy data (up to MAX_SEARCH_QUERY_LEN)
     uint32_t copy_len = len < MAX_SEARCH_QUERY_LEN ? len : MAX_SEARCH_QUERY_LEN;
@@ -766,7 +767,7 @@ void undo_save_delete(struct global* global, char ch, uint32_t pos)
 /**
  * undo_perform - Perform an undo operation
  * @global: Global state
- * 
+ *
  * Reverses the most recent action from the undo stack.
  * Saves the undone action to redo stack for possible redo.
  */
@@ -784,19 +785,23 @@ void undo_perform(struct global* global)
 
     // Perform undo
     if (act->type == action_insert) {
-        // Undo insert = delete the character that was inserted
-        // Move to position AFTER the insertion (cursor is now after the char)
-        pgb_move_to_pos(&global->text, act->pos + 1);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_delete(&global->text);
-        }
+        // Undo insert = delete the text that was inserted
+        // Use batch delete for efficiency with large text
+        pgb_delete_range(&global->text, act->pos, act->pos + act->len);
     } else if (act->type == action_delete) {
-        // Undo delete = insert the character that was deleted
+        // Undo delete = insert the text that was deleted
         // Move to position where it was deleted, then insert
         pgb_move_to_pos(&global->text, act->pos);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_insert(&global->text, act->data[i], &global->arena);
-        }
+        // Use batch insert for efficiency with large text
+        pgb_insert_str(&global->text, act->data, &global->arena);
+    } else if (act->type == action_replace) {
+        // Undo replace = restore the original text
+        pgb_move_to_pos(&global->text, act->pos);
+        // Delete new text using batch delete
+        pgb_delete_range(&global->text, act->pos, act->pos + act->len);
+        // Insert old text using batch insert
+        pgb_move_to_pos(&global->text, act->pos);
+        pgb_insert_str(&global->text, act->old_data, &global->arena);
     }
 
     global->undo_count--;
@@ -805,7 +810,7 @@ void undo_perform(struct global* global)
 /**
  * redo_perform - Perform a redo operation
  * @global: Global state
- * 
+ *
  * Reapplies the most recent undone action.
  */
 void redo_perform(struct global* global)
@@ -816,23 +821,117 @@ void redo_perform(struct global* global)
 
     // Perform redo
     if (act->type == action_insert) {
-        // Redo insert = insert the character back at original position
+        // Redo insert = insert the text back at original position
         pgb_move_to_pos(&global->text, act->pos);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_insert(&global->text, act->data[i], &global->arena);
-        }
+        // Use batch insert for efficiency with large text
+        pgb_insert_str(&global->text, act->data, &global->arena);
     } else if (act->type == action_delete) {
-        // Redo delete = delete the character again
-        // Move to position after the character, then delete
-        pgb_move_to_pos(&global->text, act->pos + 1);
-        for (uint32_t i = 0; i < act->len; i++) {
-            pgb_delete(&global->text);
-        }
+        // Redo delete = delete the text again
+        // Use batch delete for efficiency with large text
+        pgb_delete_range(&global->text, act->pos, act->pos + act->len);
+    } else if (act->type == action_replace) {
+        // Redo replace = apply the replacement again
+        pgb_move_to_pos(&global->text, act->pos);
+        // Delete old text using batch delete
+        pgb_delete_range(&global->text, act->pos, act->pos + act->old_len);
+        // Insert new text using batch insert
+        pgb_move_to_pos(&global->text, act->pos);
+        pgb_insert_str(&global->text, act->data, &global->arena);
     }
 
     // Move action back to undo stack
     global->redo_count--;
     global->undo_count++;
+}
+
+/**
+ * undo_save_replace - Save a replace action to undo stack
+ * @global: Global state
+ * @new_text: New replacement text
+ * @new_len: Length of new text
+ * @old_text: Original text being replaced
+ * @old_len: Length of old text
+ * @pos: Position where replacement occurred
+ */
+void undo_save_replace(struct global* global, const char* new_text, uint32_t new_len,
+                       const char* old_text, uint32_t old_len, uint32_t pos)
+{
+    if (global->undo_count >= UNDO_STACK_SIZE) return;
+
+    struct action* act = &global->undo_stack[global->undo_count];
+    act->type = action_replace;
+    act->len = new_len;
+    act->old_len = old_len;
+    act->pos = pos;
+
+    // Copy new text
+    uint32_t new_copy_len = new_len < MAX_SEARCH_QUERY_LEN ? new_len : MAX_SEARCH_QUERY_LEN;
+    for (uint32_t i = 0; i < new_copy_len; i++) {
+        act->data[i] = new_text[i];
+    }
+
+    // Copy old text
+    uint32_t old_copy_len = old_len < MAX_SEARCH_QUERY_LEN ? old_len : MAX_SEARCH_QUERY_LEN;
+    for (uint32_t i = 0; i < old_copy_len; i++) {
+        act->old_data[i] = old_text[i];
+    }
+
+    global->undo_count++;
+    global->redo_count = 0; // Clear redo stack on new action
+}
+
+/**
+ * undo_save_batch_insert - Save a batch insert action to undo stack
+ * @global: Global state
+ * @text: Text to insert
+ * @len: Length of text
+ * @pos: Position where insertion occurs
+ */
+void undo_save_batch_insert(struct global* global, const char* text, uint32_t len, uint32_t pos)
+{
+    undo_save_action(global, action_insert, text, len, pos);
+}
+
+/**
+ * undo_save_batch_delete - Save a batch delete action to undo stack
+ * @global: Global state
+ * @text: Text that was deleted
+ * @len: Length of text
+ * @pos: Position where deletion occurred
+ */
+void undo_save_batch_delete(struct global* global, const char* text, uint32_t len, uint32_t pos)
+{
+    undo_save_action(global, action_delete, text, len, pos);
+}
+
+/**
+ * undo_clear_history - Clear all undo/redo history
+ * @global: Global state
+ */
+void undo_clear_history(struct global* global)
+{
+    global->undo_count = 0;
+    global->redo_count = 0;
+}
+
+/**
+ * undo_can_undo - Check if undo is available
+ * @global: Global state
+ * @return: true if undo is available, false otherwise
+ */
+bool undo_can_undo(struct global* global)
+{
+    return global->undo_count > 0;
+}
+
+/**
+ * undo_can_redo - Check if redo is available
+ * @global: Global state
+ * @return: true if redo is available, false otherwise
+ */
+bool undo_can_redo(struct global* global)
+{
+    return global->redo_count > 0;
 }
 
 // ========== Search Functionality ==========
