@@ -44,7 +44,7 @@ TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
 DEPS = $(OBJS:.o=.d) $(TEST_C_OBJS:.o=.d) $(TEST_CPP_OBJS:.o=.d)
 
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd bench-search check help
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd bench-search check help release
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -194,6 +194,22 @@ check:
 	@echo "Running cppcheck..."
 	@cppcheck --enable=all --suppress=missingIncludeSystem $(SRCDIR)/
 
+# Release target
+release: clean all test
+	@echo "Creating release..."
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION must be set. Usage: make release VERSION=x.y.z"; \
+		exit 1; \
+	fi
+	@echo "Building release v$(VERSION)..."
+	@mkdir -p release
+	@cp $(TARGET) release/zex
+	@strip release/zex
+	@cd release && tar -czf zex-$(VERSION)-$$(uname -m)-$$(uname -s | tr '[:upper:]' '[:lower:]').tar.gz zex
+	@echo "Release created: release/zex-$(VERSION)-$$(uname -m)-$$(uname -s | tr '[:upper:]' '[:lower:]').tar.gz"
+	@echo "Binary size: $$(du -h release/zex | cut -f1)"
+	@echo "Release v$(VERSION) complete!"
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -215,6 +231,7 @@ help:
 	@echo "  format-astyle    : Format source with astyle (K&R, 4-space indent)"
 	@echo "  format-check     : Check formatting without changes"
 	@echo "  check            : Static analysis with cppcheck"
+	@echo "  release          : Create release (VERSION=x.y.z required)"
 	@echo "  help             : Show this help"
 
 # Individual test targets
