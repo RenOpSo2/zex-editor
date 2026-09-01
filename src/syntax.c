@@ -7,17 +7,17 @@
 #include <limits.h>
 #include <strings.h>
 
-// ANSI color codes - ALL GREEN as requested
+// ANSI color codes - Modern color scheme with better contrast
 #define COLOR_RESET "\033[0m"
-#define COLOR_KEYWORD "\033[38;5;2m"       // Green
-#define COLOR_TYPE "\033[38;5;28m"         // Green (lighter)
-#define COLOR_FUNCTION "\033[38;5;34m"    // Green (bright)
-#define COLOR_STRING "\033[38;5;71m"       // Green (brightest)
-#define COLOR_COMMENT "\033[38;5;242m"     // Green (dark gray)
-#define COLOR_NUMBER "\033[38;5;46m"       // Green (intense)
-#define COLOR_OPERATOR "\033[38;5;82m"     // Green (very bright)
-#define COLOR_PREPROC "\033[38;5;106m"     // Green (medium)
-#define COLOR_CONSTANT "\033[38;5;120m"    // Green (light)
+#define COLOR_KEYWORD "\033[38;5;201m"       // Magenta for keywords
+#define COLOR_TYPE "\033[38;5;38m"         // Blue for types
+#define COLOR_FUNCTION "\033[38;5;226m"    // Yellow for functions
+#define COLOR_STRING "\033[38;5;208m"       // Orange for strings
+#define COLOR_COMMENT "\033[38;5;242m"     // Gray for comments
+#define COLOR_NUMBER "\033[38;5;141m"       // Purple for numbers
+#define COLOR_OPERATOR "\033[38;5;196m"     // Red for operators
+#define COLOR_PREPROC "\033[38;5;129m"     // Purple for preprocessor
+#define COLOR_CONSTANT "\033[38;5;85m"    // Cyan for constants
 
 // C/C++ keywords
 static const char* keywords[] = {

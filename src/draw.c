@@ -60,7 +60,9 @@ static void append_sanitized(RenderBuffer* out, const char* s, size_t len, uint3
 static void draw_line_number(uint32_t line_num)
 {
     if (!config_get_bool("show_line_numbers", 1)) return;
-    RB_ESC("\x1b[0m\x1b[38;5;244m");
+    // Modern line number styling with better contrast
+    RB_ESC("\x1b[0m\x1b[38;5;238m"); // Darker gray for better readability
+    RB_ESC("\x1b[1m"); // Bold for better visibility
     char buf[16];
     int n = snprintf(buf, sizeof(buf), "%5u ", (unsigned)(line_num + 1u));
     if (n > 0) {
@@ -75,13 +77,22 @@ void draw_init(void)
 {
     rb_init(&rb);
     rb_init(&line_disp);
-    RB_ESC("\x1b[?1049h\x1b[0m\x1b[39;49m\x1b[2J\x1b[H");
+    // Modern terminal initialization with extended features
+    RB_ESC("\x1b[?1049h"); // Alternate screen buffer
+    RB_ESC("\x1b[0m");     // Reset all attributes
+    RB_ESC("\x1b[39;49m"); // Default colors
+    RB_ESC("\x1b[2J");     // Clear screen
+    RB_ESC("\x1b[H");      // Home cursor
+    RB_ESC("\x1b[?25l");   // Hide cursor initially
     rb_flush(&rb);
 }
 
 static void draw_cursor_home(void)
 {
-    RB_ESC("\x1b[0m\x1b[39;49m\x1b[H\x1b[2J");
+    RB_ESC("\x1b[0m");     // Reset attributes
+    RB_ESC("\x1b[39;49m"); // Default colors
+    RB_ESC("\x1b[H");      // Home cursor
+    RB_ESC("\x1b[2J");     // Clear screen
 }
 
 struct doc_stats {
@@ -194,20 +205,27 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
 {
     uint32_t tab_size = draw_tab_size();
     uint32_t rendered = 0, line_no = 0, disp_cols = 0;
-    int storing = 0;
     rb_clear(&line_disp);
     struct pgb_reader it;
     pgb_reader_init(&it, pgb);
     int c;
     unsigned char ch[4];
+    
+    // Skip lines before scroll_offset
+    while (line_no < scroll_offset && (c = pgb_reader_next(&it)) >= 0) {
+        if (c == '\n') {
+            line_no++;
+        }
+    }
+    
+    // Now render visible lines
     while ((c = pgb_reader_next(&it)) >= 0 && rendered < rows) {
         if (c == '\n') {
-            if (storing) {
-                emit_visible_line(line_no, language);
-                rendered++;
-                storing = 0;
-            }
+            emit_visible_line(line_no, language);
+            rendered++;
             line_no++;
+            rb_clear(&line_disp);
+            disp_cols = 0;
             continue;
         }
         size_t got = 0;
@@ -218,19 +236,15 @@ static void render_visible_lines(const struct paged_gap_buffer* pgb, uint32_t ro
             if (d < 0) break;
             ch[got++] = (unsigned char)d;
         }
-        if (!storing && line_no >= scroll_offset) {
-            storing = 1;
-            rb_clear(&line_disp);
-            disp_cols = 0;
-        }
-        if (storing) {
-            line_store_char(ch, got, &disp_cols, tab_size, width);
-        }
+        line_store_char(ch, got, &disp_cols, tab_size, width);
     }
-    if (storing) {
+    
+    // Render last line if it doesn't end with newline
+    if (line_disp.len > 0) {
         emit_visible_line(line_no, language);
         rendered++;
     }
+    
     for (; rendered < rows; rendered++) {
         RB_ESC("\x1b[K\r\n");
     }
@@ -244,11 +258,12 @@ static void position_cursor(uint32_t cursor_line, uint32_t cursor_col, uint32_t 
     uint32_t avail = (cols > gutter) ? cols - gutter : 1;
     uint32_t disp_col = (cursor_col < avail) ? cursor_col : avail - 1;
     char seq[32];
+    // Status bar is at line 0, text starts at line 1 (1-indexed)
     int n = snprintf(seq, sizeof(seq), "\x1b[%u;%uH", (unsigned)(vis_line + 2u), (unsigned)(disp_col + gutter + 1u));
     if (n > 0 && (size_t)n < sizeof(seq)) {
         rb_append(&rb, seq, (size_t)n);
     }
-    RB_ESC("\x1b[?25h");
+    RB_ESC("\x1b[?25h"); // Show cursor
 }
 
 static void draw_text(const struct paged_gap_buffer* pgb, uint32_t rows, uint32_t cols, const char* filepath)
@@ -267,23 +282,37 @@ static void draw_text(const struct paged_gap_buffer* pgb, uint32_t rows, uint32_
 
 static void draw_status(struct global* global, uint32_t cols)
 {
-    static const char prefix[] = " zex | ", indent[] = "  ", hints_color[] = "\x1b[38;5;244m", hints[] = "Ctrl+S: Save  Ctrl+Q: Quit  Ctrl+F: Search  Ctrl+R: Refresh", msg_color[] = "\x1b[38;5;220m";
+    // Modern status bar with better colors and styling
+    static const char prefix[] = " zex | ", indent[] = "  ";
+    static const char bg_color[] = "\x1b[48;5;238m";      // Darker, more modern background
+    static const char fg_color[] = "\x1b[38;5;255m";      // Bright white text
+    static const char accent_color[] = "\x1b[38;5;220m";  // Golden yellow for messages
+    static const char hint_color[] = "\x1b[38;5;244m";    // Gray for hints
+    static const char bold[] = "\x1b[1m";                 // Bold text
+    static const char dim[] = "\x1b[2m";                  // Dim text
+    static const char hints[] = "Ctrl+S: Save  Ctrl+Q: Quit  Ctrl+F: Search  Ctrl+R: Refresh";
 
-    RB_ESC("\x1b[0m\x1b[48;5;235m\x1b[38;5;250m");
+    RB_ESC("\x1b[0m");
+    RB_ESC(bg_color);
+    RB_ESC(fg_color);
 
     uint32_t budget = cols;
     rb_append(&rb, prefix, sizeof(prefix) - 1);
     budget -= (budget > (sizeof(prefix) - 1)) ? (uint32_t)(sizeof(prefix) - 1) : budget;
 
+    // File name with bold styling
     uint32_t name_budget = (budget > 10u) ? budget - 10u : 0;
     uint32_t before = name_budget;
+    RB_ESC(bold);
     if (global->filepath[0] != '\0') {
         append_sanitized(&rb, global->filepath, strlen(global->filepath), &name_budget);
     } else {
         append_sanitized(&rb, "[No file]", sizeof("[No file]") - 1, &name_budget);
     }
+    RB_ESC("\x1b[22m"); // Reset bold
     budget -= before - name_budget;
 
+    // Message with accent color
     if (global->msg.head && budget > 0) {
         char msg_buf[256];
         pgb_to_str(msg_buf, sizeof(msg_buf), &global->msg);
@@ -291,20 +320,25 @@ static void draw_status(struct global* global, uint32_t cols)
             uint32_t indent_w = (budget > (sizeof(indent) - 1)) ? (uint32_t)(sizeof(indent) - 1) : budget;
             budget -= indent_w;
             rb_append(&rb, indent, indent_w);
-            RB_ESC(msg_color);
+            RB_ESC(accent_color);
+            RB_ESC(bold);
             uint32_t msg_budget = budget;
             append_sanitized(&rb, msg_buf, strlen(msg_buf), &msg_budget);
+            RB_ESC("\x1b[22m"); // Reset bold
             budget -= msg_budget;
         }
     }
 
+    // Hints with dim styling
     if (budget > 0) {
         uint32_t indent_w = (budget > (sizeof(indent) - 1)) ? (uint32_t)(sizeof(indent) - 1) : budget;
         budget -= indent_w;
         rb_append(&rb, indent, indent_w);
-        RB_ESC(hints_color);
+        RB_ESC(hint_color);
+        RB_ESC(dim);
         uint32_t hints_budget = budget;
         append_sanitized(&rb, hints, sizeof(hints) - 1, &hints_budget);
+        RB_ESC("\x1b[22m"); // Reset dim
     }
 
     RB_ESC("\x1b[0m\x1b[39;49m\x1b[K\r\n");
@@ -317,7 +351,7 @@ void draw_update(struct global* global)
     uint32_t ws_cols = (uint32_t)global->term.ws.ws_col;
     if (ws_rows == 0) ws_rows = DRAW_FALLBACK_ROWS;
     if (ws_cols == 0) ws_cols = DRAW_FALLBACK_COLS;
-    uint32_t rows_text = (ws_rows >= 3u) ? ws_rows - 2u : 1u;
+    uint32_t rows_text = (ws_rows >= 2u) ? ws_rows - 1u : 1u; // 1 row for status bar
     rb_clear(&rb);
     draw_cursor_home();
     draw_status(global, ws_cols);
@@ -328,7 +362,11 @@ void draw_update(struct global* global)
 void draw_deinit(void)
 {
     rb_clear(&rb);
-    RB_ESC("\x1b[?25h\x1b[0m\x1b[39;49m\x1b[?1049l");
+    // Modern terminal cleanup
+    RB_ESC("\x1b[?25h");   // Show cursor
+    RB_ESC("\x1b[0m");     // Reset attributes
+    RB_ESC("\x1b[39;49m"); // Default colors
+    RB_ESC("\x1b[?1049l"); // Exit alternate screen buffer
     rb_flush(&rb);
     rb_deinit(&rb);
     rb_deinit(&line_disp);

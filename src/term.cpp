@@ -104,12 +104,12 @@ public:
         /* Local: raw input (no line buffering, no echo). */
         term.c_lflag &= ~(unsigned int)(ICANON | ECHO);
 
-        /* Set control characters for non-blocking read:
-         * VMIN=0  -> read() returns immediately even with 0 bytes
-         * VTIME=1 -> timeout of 100ms (tenths of seconds)
+        /* Set control characters for blocking read:
+         * VMIN=1  -> read() blocks until at least 1 byte is available
+         * VTIME=0 -> no timeout (blocking)
          */
-        term.c_cc[VMIN] = 0;
-        term.c_cc[VTIME] = 1;
+        term.c_cc[VMIN] = 1;
+        term.c_cc[VTIME] = 0;
 
         /* Apply modified terminal settings */
         if (::ioctl(STDIN_FILENO, TCSETS, &term) == -1) {

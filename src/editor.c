@@ -70,7 +70,8 @@ void editor_deinit(struct global* global)
 
 enum result editor_update(struct global* global)
 {
-    if (input_update(global) == err) {
+    enum result res = input_update(global);
+    if (res == err) {
         return err;
     }
     term_update(&global->term);
