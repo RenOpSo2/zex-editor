@@ -117,7 +117,7 @@ int main() {
     new_large[2000] = '\0';
     
     // Simulate replace: delete old, insert new using batch operations
-    pgb_delete_range(&global->text, 0, 2000);
+    pgb_delete_range(&global.text, 0, 2000);
     pgb_insert_str(&global.text, new_large, &global.arena);
     
     undo_save_replace(&global, new_large, 2000, old_large, 2000, pos);
