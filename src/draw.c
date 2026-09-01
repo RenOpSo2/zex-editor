@@ -34,7 +34,7 @@ uint32_t draw_gutter_width(void)
 
 static void append_sanitized(RenderBuffer* out, const char* s, size_t len, uint32_t* budget)
 {
-    if (!out || !s || !budget || *budget == 0) return;
+    if (!out || !s || !budget) return;
     
     size_t i = 0;
     while (i < len && *budget > 0) {
@@ -56,9 +56,9 @@ static void append_sanitized(RenderBuffer* out, const char* s, size_t len, uint3
             *budget -= 2;
         } else {
             uint32_t cp;
-            if (utf8_decode(ch, got, &cp) != 0) continue;
+            (void)utf8_decode(ch, got, &cp);
             uint32_t w = codepoint_width(cp);
-            if (w == 0 || w > *budget) break;
+            if (w > *budget) break;
             if (rb_append(out, (const char*)ch, got) != ok) return;
             *budget -= w;
         }
@@ -201,9 +201,9 @@ static void line_store_char(const unsigned char* ch, size_t n, uint32_t* disp_co
     }
     
     uint32_t cp;
-    if (utf8_decode(ch, n, &cp) != 0) return;
+    (void)utf8_decode(ch, n, &cp);
     uint32_t w = codepoint_width(cp);
-    if (w == 0 || *disp_cols + w > width) {
+    if (*disp_cols + w > width) {
         *disp_cols = width;
         return;
     }
