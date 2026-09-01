@@ -124,6 +124,7 @@ static void draw_cursor_home(void)
 {
     RB_ESC(ANSI_RESET);
     RB_ESC(ANSI_DEFAULT_COLORS);
+    RB_ESC(ANSI_CURSOR_HOME);
     RB_ESC(ANSI_CLEAR_SCREEN);
 }
 
@@ -327,19 +328,18 @@ static void position_cursor(uint32_t cursor_line, uint32_t cursor_col, uint32_t 
     RB_ESC(ANSI_CURSOR_SHOW);
 }
 
-static void draw_text(const struct paged_gap_buffer* pgb, uint32_t rows, uint32_t cols, const char* filepath)
+static void draw_text(const struct paged_gap_buffer* pgb, uint32_t rows, uint32_t cols, const char* filepath, struct doc_stats* st)
 {
-    if (!pgb || rows == 0 || cols == 0) return;
+    if (!pgb || rows == 0 || cols == 0 || !st) return;
     
-    struct doc_stats st;
-    compute_doc_stats(pgb, pgb_cursor_pos(pgb), &st);
-    uint32_t scroll_offset = compute_scroll_offset(st.cur_line, rows);
+    RB_ESC(ANSI_RESET ANSI_DEFAULT_COLORS);
+    
+    uint32_t scroll_offset = compute_scroll_offset(st->cur_line, rows);
     int language = (filepath && filepath[0] != '\0') ? syntax_get_language(filepath) : 0;
     uint32_t gutter = draw_gutter_width();
     uint32_t width = (cols > gutter) ? cols - gutter : 1;
     
     render_visible_lines(pgb, rows, scroll_offset, width, language);
-    position_cursor(st.cur_line, st.cur_col, scroll_offset, cols, rows);
 }
 
 static void draw_status(struct global* global, uint32_t cols)
@@ -426,7 +426,12 @@ void draw_update(struct global* global)
     rb_clear(&rb);
     draw_cursor_home();
     draw_status(global, ws_cols);
-    draw_text(&global->text, rows_text, ws_cols, global->filepath);
+    
+    struct doc_stats st;
+    compute_doc_stats(&global->text, pgb_cursor_pos(&global->text), &st);
+    draw_text(&global->text, rows_text, ws_cols, global->filepath, &st);
+    
+    position_cursor(st.cur_line, st.cur_col, compute_scroll_offset(st.cur_line, rows_text), ws_cols, rows_text);
     rb_flush(&rb);
 }
 
