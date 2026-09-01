@@ -32,15 +32,16 @@ TEST_STRESS_TARGET     = $(BINDIR)/test_stress
 TEST_EDGE_TARGET       = $(BINDIR)/test_edge
 TEST_CURSOR_TARGET     = $(BINDIR)/test_cursor
 TEST_CPP_BRIDGE_TARGET = $(BINDIR)/test_cpp_bridge
+TEST_FILE_IO_TARGET    = $(BINDIR)/test_file_io
 
-TEST_C_SRCS = tests/test_undo.c tests/test_enhanced_undo.c tests/test_large_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c
+TEST_C_SRCS = tests/test_undo.c tests/test_enhanced_undo.c tests/test_large_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c tests/test_file_io.c
 TEST_CPP_SRCS = tests/test_cpp_bridge.cpp
 TEST_C_OBJS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%.o, $(TEST_C_SRCS))
 TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
 DEPS = $(OBJS:.o=.d) $(TEST_C_OBJS:.o=.d) $(TEST_CPP_OBJS:.o=.d)
 
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge bench-search check help
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io bench-search check help
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -102,6 +103,11 @@ $(TEST_CURSOR_TARGET): $(BUILDDIR)/tests/test_cursor.o $(LIB_OBJS)
 
 $(TEST_CPP_BRIDGE_TARGET): $(BUILDDIR)/tests/test_cpp_bridge.o $(LIB_OBJS)
 	@echo "Linking C++ bridge test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_FILE_IO_TARGET): $(BUILDDIR)/tests/test_file_io.o $(LIB_OBJS)
+	@echo "Linking file I/O test..."
 	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
@@ -182,6 +188,7 @@ help:
 	@echo "  test-cpp-bridge  : Build and run the C++ bridge smoke test"
 	@echo "  test-enhanced-undo: Build and run enhanced undo test only"
 	@echo "  test-large-undo  : Build and run large undo test only"
+	@echo "  test-file-io     : Build and run file I/O test only"
 	@echo "  clean            : Remove build artifacts"
 	@echo "  format           : Format source with clang-format"
 	@echo "  format-astyle    : Format source with astyle (K&R, 4-space indent)"
@@ -214,8 +221,12 @@ test-large-undo: dirs $(TEST_LARGE_UNDO_TARGET)
 	@echo "Running large undo test..."
 	@$(TEST_LARGE_UNDO_TARGET)
 
+test-file-io: dirs $(TEST_FILE_IO_TARGET)
+	@echo "Running file I/O test..."
+	@$(TEST_FILE_IO_TARGET)
+
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET) $(TEST_FILE_IO_TARGET)
 	@echo "Running test_undo..."
 	@$(TEST_UNDO_TARGET)
 	@echo "Running test_enhanced_undo..."
@@ -234,3 +245,5 @@ test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TA
 	@$(TEST_CURSOR_TARGET)
 	@echo "Running test_cpp_bridge..."
 	@$(TEST_CPP_BRIDGE_TARGET)
+	@echo "Running test_file_io..."
+	@$(TEST_FILE_IO_TARGET)
