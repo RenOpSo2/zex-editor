@@ -124,7 +124,6 @@ static void draw_cursor_home(void)
 {
     RB_ESC(ANSI_RESET);
     RB_ESC(ANSI_DEFAULT_COLORS);
-    RB_ESC(ANSI_CURSOR_HOME);
     RB_ESC(ANSI_CLEAR_SCREEN);
 }
 
@@ -331,8 +330,6 @@ static void position_cursor(uint32_t cursor_line, uint32_t cursor_col, uint32_t 
 static void draw_text(const struct paged_gap_buffer* pgb, uint32_t rows, uint32_t cols, const char* filepath)
 {
     if (!pgb || rows == 0 || cols == 0) return;
-    
-    RB_ESC(ANSI_RESET ANSI_DEFAULT_COLORS);
     
     struct doc_stats st;
     compute_doc_stats(pgb, pgb_cursor_pos(pgb), &st);
