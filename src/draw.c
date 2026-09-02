@@ -320,7 +320,7 @@ static void position_cursor(uint32_t cursor_line, uint32_t cursor_col, uint32_t 
     uint32_t disp_col = (cursor_col < avail) ? cursor_col : avail - 1;
     
     char seq[CURSOR_SEQ_BUF_SIZE];
-    int n = snprintf(seq, sizeof(seq), "\x1b[%u;%uH", (unsigned)(vis_line + 2u), (unsigned)(disp_col + gutter + 1u));
+    int n = snprintf(seq, sizeof(seq), "\x1b[%u;%uH", (unsigned)(vis_line + 1u), (unsigned)(disp_col + gutter + 1u));
     if (n > 0 && (size_t)n < sizeof(seq)) {
         rb_append(&rb, seq, (size_t)n);
     }
