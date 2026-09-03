@@ -732,7 +732,7 @@ void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
  */
 static void undo_save_action(struct global* global, enum action_type type, const char* data, uint32_t len, uint32_t pos)
 {
-    if (global->undo_count >= UNDO_STACK_SIZE) return;
+    if (!global || !data || global->undo_count >= UNDO_STACK_SIZE) return;
 
     struct action* act = &global->undo_stack[global->undo_count];
     act->type = type;
@@ -1056,7 +1056,7 @@ void search_find(struct global* global, const char* query)
  */
 void search_next(struct global* global)
 {
-    if (!global->search_active || global->search_query[0] == '\0') return;
+    if (!global || !global->search_active || global->search_query[0] == '\0') return;
 
     char* query = global->search_query;
     uint32_t query_len = global->search_query_len;
@@ -1085,7 +1085,7 @@ void search_next(struct global* global)
  */
 void search_prev(struct global* global)
 {
-    if (!global->search_active || global->search_query[0] == '\0') return;
+    if (!global || !global->search_active || global->search_query[0] == '\0') return;
 
     char* query = global->search_query;
     uint32_t prev_pos = search_scan(&global->text, query, global->search_query_len, 0, global->search_pos, true, NULL);
