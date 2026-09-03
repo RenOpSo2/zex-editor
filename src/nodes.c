@@ -107,6 +107,38 @@ static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
 }
 
 /**
+ * compact_page_after_gap - Move all content after gap to before gap
+ * @p: Page to compact
+ * 
+ * Helper function that compacts a page by moving content from after
+ * the gap to before the gap. Used when moving cursor between pages.
+ */
+static void compact_page_after_gap(struct page* p)
+{
+    if (!p) return;
+    while (p->gap_end < PAGE_CAPACITY) {
+        p->data[p->gap_start++] = p->data[p->gap_end++];
+    }
+}
+
+/**
+ * compact_page_before_gap - Move all content before gap to after gap
+ * @p: Page to compact
+ * 
+ * Helper function that compacts a page by moving content from before
+ * the gap to after the gap. Used when moving cursor between pages.
+ */
+static void compact_page_before_gap(struct page* p)
+{
+    if (!p) return;
+    while (p->gap_start > 0) {
+        p->gap_end--;
+        p->gap_start--;
+        p->data[p->gap_end] = p->data[p->gap_start];
+    }
+}
+
+/**
  * pgb_insert - Insert a single character at cursor position
  * @pgb: Paged gap buffer
  * @ch: Character to insert
@@ -152,9 +184,7 @@ void pgb_delete(struct paged_gap_buffer* pgb)
         p = pgb->active_page;
         if (!p) return;
         // Move all content after gap to before gap (compact page)
-        while (p->gap_end < PAGE_CAPACITY) {
-            p->data[p->gap_start++] = p->data[p->gap_end++];
-        }
+        compact_page_after_gap(p);
         // Recursively delete (now works on previous page's content)
         pgb_delete(pgb);
     }
@@ -314,9 +344,7 @@ void pgb_move_left(struct paged_gap_buffer* pgb)
         p = pgb->active_page;
         if (!p) return;
         // Compact current page (move all content after gap to before gap)
-        while (p->gap_end < PAGE_CAPACITY) {
-            p->data[p->gap_start++] = p->data[p->gap_end++];
-        }
+        compact_page_after_gap(p);
         // Now move left one character on this page
         if (p->gap_start > 0) {
             p->gap_end--;
@@ -346,11 +374,7 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
         p = pgb->active_page;
         if (!p) return;
         // Compact current page (move all content before gap to after gap)
-        while (p->gap_start > 0) {
-            p->gap_end--;
-            p->gap_start--;
-            p->data[p->gap_end] = p->data[p->gap_start];
-        }
+        compact_page_before_gap(p);
         // Now move right one character on this page
         if (p->gap_end < PAGE_CAPACITY) {
             p->data[p->gap_start++] = p->data[p->gap_end++];
@@ -656,12 +680,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
         pgb->active_page = pgb->active_page->prev;
     }
     // Compact first page completely
-    while (pgb->active_page->gap_start > 0) {
-        pgb->active_page->gap_end--;
-        pgb->active_page->gap_start--;
-        pgb->active_page->data[pgb->active_page->gap_end] =
-            pgb->active_page->data[pgb->active_page->gap_start];
-    }
+    compact_page_before_gap(pgb->active_page);
     // Advance right by target steps
     for (uint32_t i = 0; i < target; i++) {
         struct page* p = pgb->active_page;
