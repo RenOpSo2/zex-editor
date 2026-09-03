@@ -142,6 +142,7 @@ void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
  */
 void pgb_delete(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_start > 0) {
         p->gap_start--;  // Simple case: gap expands left
@@ -149,6 +150,7 @@ void pgb_delete(struct paged_gap_buffer* pgb)
         // Cursor at start of page - need to pull content from previous page
         pgb->active_page = p->prev;
         p = pgb->active_page;
+        if (!p) return;
         // Move all content after gap to before gap (compact page)
         while (p->gap_end < PAGE_CAPACITY) {
             p->data[p->gap_start++] = p->data[p->gap_end++];
