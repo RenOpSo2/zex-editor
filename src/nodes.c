@@ -335,6 +335,7 @@ void pgb_move_left(struct paged_gap_buffer* pgb)
  */
 void pgb_move_right(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_end < PAGE_CAPACITY) {
         // Move gap right: swap character after gap into gap
@@ -343,6 +344,7 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
         // Move to next page
         pgb->active_page = p->next;
         p = pgb->active_page;
+        if (!p) return;
         // Compact current page (move all content before gap to after gap)
         while (p->gap_start > 0) {
             p->gap_end--;
