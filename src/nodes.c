@@ -301,6 +301,7 @@ int pgb_reader_next(struct pgb_reader* it)
  */
 void pgb_move_left(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_start > 0) {
         // Move gap left: swap character before gap into gap
@@ -311,6 +312,7 @@ void pgb_move_left(struct paged_gap_buffer* pgb)
         // Move to previous page
         pgb->active_page = p->prev;
         p = pgb->active_page;
+        if (!p) return;
         // Compact current page (move all content after gap to before gap)
         while (p->gap_end < PAGE_CAPACITY) {
             p->data[p->gap_start++] = p->data[p->gap_end++];
