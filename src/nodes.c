@@ -625,6 +625,7 @@ void pgb_move_down(struct paged_gap_buffer* pgb)
  */
 uint32_t pgb_cursor_pos(const struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->head) return 0;
     uint32_t pos = 0;
     struct page* p = pgb->head;
     while (p) {
@@ -648,6 +649,8 @@ uint32_t pgb_cursor_pos(const struct paged_gap_buffer* pgb)
  */
 void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 {
+    if (!pgb || !pgb->active_page) return;
+    
     // Move to start first
     while (pgb->active_page->prev) {
         pgb->active_page = pgb->active_page->prev;
@@ -662,7 +665,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
     // Advance right by target steps
     for (uint32_t i = 0; i < target; i++) {
         struct page* p = pgb->active_page;
-        if (p->gap_end == PAGE_CAPACITY && !p->next) break;
+        if (!p || (p->gap_end == PAGE_CAPACITY && !p->next)) break;
         pgb_move_right(pgb);
     }
 }
@@ -681,6 +684,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 void pgb_copy_range(struct paged_gap_buffer* dst, const struct paged_gap_buffer* src,
                     uint32_t from, uint32_t to, Arena* arena)
 {
+    if (!dst || !src) return;
     pgb_clear(dst);
     if (from >= to) return;
 
@@ -710,7 +714,7 @@ void pgb_copy_range(struct paged_gap_buffer* dst, const struct paged_gap_buffer*
  */
 void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
 {
-    if (from >= to) return;
+    if (!pgb || from >= to) return;
     pgb_move_to_pos(pgb, to);
     uint32_t count = to - from;
     for (uint32_t i = 0; i < count; i++) {
