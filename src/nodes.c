@@ -118,11 +118,12 @@ static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
  */
 void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_start == p->gap_end) {
         page_split(pgb, arena);
         p = pgb->active_page;
-        if (p->gap_start == p->gap_end) {
+        if (!p || p->gap_start == p->gap_end) {
             // Split failed (arena exhausted): no room left, drop the
             // character instead of writing out of bounds or crashing.
             return;
