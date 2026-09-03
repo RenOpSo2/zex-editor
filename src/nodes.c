@@ -169,6 +169,7 @@ void pgb_delete(struct paged_gap_buffer* pgb)
  */
 void pgb_clear(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->head) return;
     struct page* p = pgb->head;
     while (p) {
         p->gap_start = 0;
