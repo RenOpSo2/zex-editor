@@ -590,6 +590,8 @@ static void move_to_column(struct paged_gap_buffer* pgb, uint32_t target, uint32
  */
 void pgb_move_up(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
+    
     uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = get_current_column(pgb);
 
@@ -621,6 +623,8 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
  */
 void pgb_move_down(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
+    
     uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = get_current_column(pgb);
 
@@ -808,7 +812,7 @@ void undo_save_delete(struct global* global, char ch, uint32_t pos)
  */
 void undo_perform(struct global* global)
 {
-    if (global->undo_count == 0) return;
+    if (!global || global->undo_count == 0) return;
 
     struct action* act = &global->undo_stack[global->undo_count - 1];
 
@@ -850,7 +854,7 @@ void undo_perform(struct global* global)
  */
 void redo_perform(struct global* global)
 {
-    if (global->redo_count == 0) return;
+    if (!global || global->redo_count == 0) return;
 
     struct action* act = &global->redo_stack[global->redo_count - 1];
 
@@ -891,7 +895,7 @@ void redo_perform(struct global* global)
 void undo_save_replace(struct global* global, const char* new_text, uint32_t new_len,
                        const char* old_text, uint32_t old_len, uint32_t pos)
 {
-    if (global->undo_count >= UNDO_STACK_SIZE) return;
+    if (!global || !new_text || !old_text || global->undo_count >= UNDO_STACK_SIZE) return;
 
     struct action* act = &global->undo_stack[global->undo_count];
     act->type = action_replace;
@@ -924,6 +928,7 @@ void undo_save_replace(struct global* global, const char* new_text, uint32_t new
  */
 void undo_save_batch_insert(struct global* global, const char* text, uint32_t len, uint32_t pos)
 {
+    if (!global || !text) return;
     undo_save_action(global, action_insert, text, len, pos);
 }
 
@@ -936,6 +941,7 @@ void undo_save_batch_insert(struct global* global, const char* text, uint32_t le
  */
 void undo_save_batch_delete(struct global* global, const char* text, uint32_t len, uint32_t pos)
 {
+    if (!global || !text) return;
     undo_save_action(global, action_delete, text, len, pos);
 }
 
@@ -945,6 +951,7 @@ void undo_save_batch_delete(struct global* global, const char* text, uint32_t le
  */
 void undo_clear_history(struct global* global)
 {
+    if (!global) return;
     global->undo_count = 0;
     global->redo_count = 0;
 }
@@ -956,6 +963,7 @@ void undo_clear_history(struct global* global)
  */
 bool undo_can_undo(struct global* global)
 {
+    if (!global) return false;
     return global->undo_count > 0;
 }
 
@@ -966,6 +974,7 @@ bool undo_can_undo(struct global* global)
  */
 bool undo_can_redo(struct global* global)
 {
+    if (!global) return false;
     return global->redo_count > 0;
 }
 
@@ -979,6 +988,7 @@ bool undo_can_redo(struct global* global)
  */
 void search_init(struct global* global)
 {
+    if (!global) return;
     global->search_active = false;
     global->search_query[0] = '\0';
     global->search_pos = 0;
