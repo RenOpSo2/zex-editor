@@ -77,6 +77,8 @@ void pgb_init(struct paged_gap_buffer* pgb, Arena* arena)
  */
 static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
 {
+    if (!pgb || !pgb->active_page || !arena) return;
+    
     struct page* curr = pgb->active_page;
     struct page* new_page = page_new(arena);
     if (!new_page) return; // Arena exhausted — caller (pgb_insert) will drop the edit.
@@ -150,7 +152,7 @@ static void compact_page_before_gap(struct page* p)
  */
 void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
 {
-    if (!pgb || !pgb->active_page) return;
+    if (!pgb || !pgb->active_page || !arena) return;
     struct page* p = pgb->active_page;
     if (p->gap_start == p->gap_end) {
         page_split(pgb, arena);
@@ -219,6 +221,7 @@ void pgb_clear(struct paged_gap_buffer* pgb)
  */
 void pgb_insert_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
 {
+    if (!pgb || !src || !arena) return;
     for (uint32_t i = 0; src[i] != '\0'; i++) {
         pgb_insert(pgb, src[i], arena);
     }
@@ -234,6 +237,7 @@ void pgb_insert_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
  */
 void pgb_replace_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
 {
+    if (!pgb) return;
     pgb_clear(pgb);
     pgb_insert_str(pgb, src, arena);
 }
@@ -703,7 +707,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 void pgb_copy_range(struct paged_gap_buffer* dst, const struct paged_gap_buffer* src,
                     uint32_t from, uint32_t to, Arena* arena)
 {
-    if (!dst || !src) return;
+    if (!dst || !src || !arena) return;
     pgb_clear(dst);
     if (from >= to) return;
 
