@@ -978,6 +978,8 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                             uint32_t qlen, uint32_t start, uint32_t stop,
                             bool want_last, uint32_t* count)
 {
+    if (!pgb || !q || qlen == 0 || qlen > MAX_SEARCH_QUERY_LEN) return (uint32_t)-1;
+    
     uint32_t pi[MAX_SEARCH_QUERY_LEN], j = 0, pos = 0, found = (uint32_t)-1;
     // Build prefix function for KMP
     for (uint32_t i = 1; i < qlen; i++) {
@@ -1020,10 +1022,12 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
  */
 void search_find(struct global* global, const char* query)
 {
-    if (query[0] == '\0') {
-        global->search_active = false;
-        global->search_match_count = 0;
-        global->search_query_len = 0;
+    if (!global || !query || query[0] == '\0') {
+        if (global) {
+            global->search_active = false;
+            global->search_match_count = 0;
+            global->search_query_len = 0;
+        }
         return;
     }
 
