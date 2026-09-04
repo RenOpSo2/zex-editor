@@ -1084,7 +1084,8 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                     }
                     j = pi[j - 1];
                 }
-                pos++;
+                // Increment pos with overflow protection
+                if (pos < UINT32_MAX) pos++;
             }
         }
     }
