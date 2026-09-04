@@ -1057,7 +1057,12 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
         
         // Skip pages entirely before the start position
         if (pos + page_size <= start) {
-            pos += page_size;
+            // Increment pos with overflow protection
+            if (pos <= UINT32_MAX - page_size) {
+                pos += page_size;
+            } else {
+                pos = UINT32_MAX;
+            }
             continue;
         }
         
