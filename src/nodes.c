@@ -1049,8 +1049,21 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
         if (q[i] == q[j]) j++;
         pi[i] = j;
     }
-    // Scan each page (before and after gap)
+    // Scan each page with optimization to skip irrelevant pages
     for (struct page* p = pgb->head; p; p = p->next) {
+        // Defensive: ensure gap_end >= gap_start to prevent underflow
+        uint32_t gap_size = (p->gap_end >= p->gap_start) ? (p->gap_end - p->gap_start) : 0;
+        uint32_t page_size = PAGE_CAPACITY - gap_size;
+        
+        // Skip pages entirely before the start position
+        if (pos + page_size <= start) {
+            pos += page_size;
+            continue;
+        }
+        
+        // Stop scanning if we've passed the stop position
+        if (pos >= stop) break;
+        
         uint32_t parts[2] = {p->gap_start, PAGE_CAPACITY};
         uint32_t begins[2] = {0, p->gap_end};
         for (int part = 0; part < 2; part++) {
