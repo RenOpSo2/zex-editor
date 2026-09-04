@@ -77,6 +77,8 @@ void pgb_init(struct paged_gap_buffer* pgb, Arena* arena)
  */
 static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
 {
+    if (!pgb || !pgb->active_page || !arena) return;
+    
     struct page* curr = pgb->active_page;
     struct page* new_page = page_new(arena);
     if (!new_page) return; // Arena exhausted — caller (pgb_insert) will drop the edit.
@@ -107,6 +109,38 @@ static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
 }
 
 /**
+ * compact_page_after_gap - Move all content after gap to before gap
+ * @p: Page to compact
+ * 
+ * Helper function that compacts a page by moving content from after
+ * the gap to before the gap. Used when moving cursor between pages.
+ */
+static void compact_page_after_gap(struct page* p)
+{
+    if (!p) return;
+    while (p->gap_end < PAGE_CAPACITY) {
+        p->data[p->gap_start++] = p->data[p->gap_end++];
+    }
+}
+
+/**
+ * compact_page_before_gap - Move all content before gap to after gap
+ * @p: Page to compact
+ * 
+ * Helper function that compacts a page by moving content from before
+ * the gap to after the gap. Used when moving cursor between pages.
+ */
+static void compact_page_before_gap(struct page* p)
+{
+    if (!p) return;
+    while (p->gap_start > 0) {
+        p->gap_end--;
+        p->gap_start--;
+        p->data[p->gap_end] = p->data[p->gap_start];
+    }
+}
+
+/**
  * pgb_insert - Insert a single character at cursor position
  * @pgb: Paged gap buffer
  * @ch: Character to insert
@@ -118,11 +152,12 @@ static void page_split(struct paged_gap_buffer* pgb, Arena* arena)
  */
 void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
 {
+    if (!pgb || !pgb->active_page || !arena) return;
     struct page* p = pgb->active_page;
     if (p->gap_start == p->gap_end) {
         page_split(pgb, arena);
         p = pgb->active_page;
-        if (p->gap_start == p->gap_end) {
+        if (!p || p->gap_start == p->gap_end) {
             // Split failed (arena exhausted): no room left, drop the
             // character instead of writing out of bounds or crashing.
             return;
@@ -141,6 +176,7 @@ void pgb_insert(struct paged_gap_buffer* pgb, char ch, Arena* arena)
  */
 void pgb_delete(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_start > 0) {
         p->gap_start--;  // Simple case: gap expands left
@@ -148,10 +184,9 @@ void pgb_delete(struct paged_gap_buffer* pgb)
         // Cursor at start of page - need to pull content from previous page
         pgb->active_page = p->prev;
         p = pgb->active_page;
+        if (!p) return;
         // Move all content after gap to before gap (compact page)
-        while (p->gap_end < PAGE_CAPACITY) {
-            p->data[p->gap_start++] = p->data[p->gap_end++];
-        }
+        compact_page_after_gap(p);
         // Recursively delete (now works on previous page's content)
         pgb_delete(pgb);
     }
@@ -166,6 +201,7 @@ void pgb_delete(struct paged_gap_buffer* pgb)
  */
 void pgb_clear(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->head) return;
     struct page* p = pgb->head;
     while (p) {
         p->gap_start = 0;
@@ -185,6 +221,7 @@ void pgb_clear(struct paged_gap_buffer* pgb)
  */
 void pgb_insert_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
 {
+    if (!pgb || !src || !arena) return;
     for (uint32_t i = 0; src[i] != '\0'; i++) {
         pgb_insert(pgb, src[i], arena);
     }
@@ -200,6 +237,7 @@ void pgb_insert_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
  */
 void pgb_replace_str(struct paged_gap_buffer* pgb, const char* src, Arena* arena)
 {
+    if (!pgb) return;
     pgb_clear(pgb);
     pgb_insert_str(pgb, src, arena);
 }
@@ -297,6 +335,7 @@ int pgb_reader_next(struct pgb_reader* it)
  */
 void pgb_move_left(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_start > 0) {
         // Move gap left: swap character before gap into gap
@@ -307,10 +346,9 @@ void pgb_move_left(struct paged_gap_buffer* pgb)
         // Move to previous page
         pgb->active_page = p->prev;
         p = pgb->active_page;
+        if (!p) return;
         // Compact current page (move all content after gap to before gap)
-        while (p->gap_end < PAGE_CAPACITY) {
-            p->data[p->gap_start++] = p->data[p->gap_end++];
-        }
+        compact_page_after_gap(p);
         // Now move left one character on this page
         if (p->gap_start > 0) {
             p->gap_end--;
@@ -329,6 +367,7 @@ void pgb_move_left(struct paged_gap_buffer* pgb)
  */
 void pgb_move_right(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
     struct page* p = pgb->active_page;
     if (p->gap_end < PAGE_CAPACITY) {
         // Move gap right: swap character after gap into gap
@@ -337,12 +376,9 @@ void pgb_move_right(struct paged_gap_buffer* pgb)
         // Move to next page
         pgb->active_page = p->next;
         p = pgb->active_page;
+        if (!p) return;
         // Compact current page (move all content before gap to after gap)
-        while (p->gap_start > 0) {
-            p->gap_end--;
-            p->gap_start--;
-            p->data[p->gap_end] = p->data[p->gap_start];
-        }
+        compact_page_before_gap(p);
         // Now move right one character on this page
         if (p->gap_end < PAGE_CAPACITY) {
             p->data[p->gap_start++] = p->data[p->gap_end++];
@@ -554,6 +590,8 @@ static void move_to_column(struct paged_gap_buffer* pgb, uint32_t target, uint32
  */
 void pgb_move_up(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
+    
     uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = get_current_column(pgb);
 
@@ -585,6 +623,8 @@ void pgb_move_up(struct paged_gap_buffer* pgb)
  */
 void pgb_move_down(struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->active_page) return;
+    
     uint32_t tab_size = (uint32_t)config_get_number("tabsize", 4);
     uint32_t col = get_current_column(pgb);
 
@@ -617,6 +657,7 @@ void pgb_move_down(struct paged_gap_buffer* pgb)
  */
 uint32_t pgb_cursor_pos(const struct paged_gap_buffer* pgb)
 {
+    if (!pgb || !pgb->head) return 0;
     uint32_t pos = 0;
     struct page* p = pgb->head;
     while (p) {
@@ -640,21 +681,18 @@ uint32_t pgb_cursor_pos(const struct paged_gap_buffer* pgb)
  */
 void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 {
+    if (!pgb || !pgb->active_page) return;
+    
     // Move to start first
     while (pgb->active_page->prev) {
         pgb->active_page = pgb->active_page->prev;
     }
     // Compact first page completely
-    while (pgb->active_page->gap_start > 0) {
-        pgb->active_page->gap_end--;
-        pgb->active_page->gap_start--;
-        pgb->active_page->data[pgb->active_page->gap_end] =
-            pgb->active_page->data[pgb->active_page->gap_start];
-    }
+    compact_page_before_gap(pgb->active_page);
     // Advance right by target steps
     for (uint32_t i = 0; i < target; i++) {
         struct page* p = pgb->active_page;
-        if (p->gap_end == PAGE_CAPACITY && !p->next) break;
+        if (!p || (p->gap_end == PAGE_CAPACITY && !p->next)) break;
         pgb_move_right(pgb);
     }
 }
@@ -673,6 +711,7 @@ void pgb_move_to_pos(struct paged_gap_buffer* pgb, uint32_t target)
 void pgb_copy_range(struct paged_gap_buffer* dst, const struct paged_gap_buffer* src,
                     uint32_t from, uint32_t to, Arena* arena)
 {
+    if (!dst || !src || !arena) return;
     pgb_clear(dst);
     if (from >= to) return;
 
@@ -702,7 +741,7 @@ void pgb_copy_range(struct paged_gap_buffer* dst, const struct paged_gap_buffer*
  */
 void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
 {
-    if (from >= to) return;
+    if (!pgb || from >= to) return;
     pgb_move_to_pos(pgb, to);
     uint32_t count = to - from;
     for (uint32_t i = 0; i < count; i++) {
@@ -724,7 +763,7 @@ void pgb_delete_range(struct paged_gap_buffer* pgb, uint32_t from, uint32_t to)
  */
 static void undo_save_action(struct global* global, enum action_type type, const char* data, uint32_t len, uint32_t pos)
 {
-    if (global->undo_count >= UNDO_STACK_SIZE) return;
+    if (!global || !data || global->undo_count >= UNDO_STACK_SIZE) return;
 
     struct action* act = &global->undo_stack[global->undo_count];
     act->type = type;
@@ -773,7 +812,7 @@ void undo_save_delete(struct global* global, char ch, uint32_t pos)
  */
 void undo_perform(struct global* global)
 {
-    if (global->undo_count == 0) return;
+    if (!global || global->undo_count == 0) return;
 
     struct action* act = &global->undo_stack[global->undo_count - 1];
 
@@ -815,7 +854,7 @@ void undo_perform(struct global* global)
  */
 void redo_perform(struct global* global)
 {
-    if (global->redo_count == 0) return;
+    if (!global || global->redo_count == 0) return;
 
     struct action* act = &global->redo_stack[global->redo_count - 1];
 
@@ -856,7 +895,7 @@ void redo_perform(struct global* global)
 void undo_save_replace(struct global* global, const char* new_text, uint32_t new_len,
                        const char* old_text, uint32_t old_len, uint32_t pos)
 {
-    if (global->undo_count >= UNDO_STACK_SIZE) return;
+    if (!global || !new_text || !old_text || global->undo_count >= UNDO_STACK_SIZE) return;
 
     struct action* act = &global->undo_stack[global->undo_count];
     act->type = action_replace;
@@ -889,6 +928,7 @@ void undo_save_replace(struct global* global, const char* new_text, uint32_t new
  */
 void undo_save_batch_insert(struct global* global, const char* text, uint32_t len, uint32_t pos)
 {
+    if (!global || !text) return;
     undo_save_action(global, action_insert, text, len, pos);
 }
 
@@ -901,6 +941,7 @@ void undo_save_batch_insert(struct global* global, const char* text, uint32_t le
  */
 void undo_save_batch_delete(struct global* global, const char* text, uint32_t len, uint32_t pos)
 {
+    if (!global || !text) return;
     undo_save_action(global, action_delete, text, len, pos);
 }
 
@@ -910,6 +951,7 @@ void undo_save_batch_delete(struct global* global, const char* text, uint32_t le
  */
 void undo_clear_history(struct global* global)
 {
+    if (!global) return;
     global->undo_count = 0;
     global->redo_count = 0;
 }
@@ -921,6 +963,7 @@ void undo_clear_history(struct global* global)
  */
 bool undo_can_undo(struct global* global)
 {
+    if (!global) return false;
     return global->undo_count > 0;
 }
 
@@ -931,6 +974,7 @@ bool undo_can_undo(struct global* global)
  */
 bool undo_can_redo(struct global* global)
 {
+    if (!global) return false;
     return global->redo_count > 0;
 }
 
@@ -944,6 +988,7 @@ bool undo_can_redo(struct global* global)
  */
 void search_init(struct global* global)
 {
+    if (!global) return;
     global->search_active = false;
     global->search_query[0] = '\0';
     global->search_pos = 0;
@@ -970,6 +1015,33 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                             uint32_t qlen, uint32_t start, uint32_t stop,
                             bool want_last, uint32_t* count)
 {
+    if (!pgb || !q || qlen == 0 || qlen > MAX_SEARCH_QUERY_LEN) return (uint32_t)-1;
+    
+    // Calculate total buffer size with overflow protection
+    uint32_t total_size = 0;
+    for (struct page* p = pgb->head; p; p = p->next) {
+        // Defensive: ensure gap_end >= gap_start to prevent underflow
+        uint32_t gap_size = (p->gap_end >= p->gap_start) ? (p->gap_end - p->gap_start) : 0;
+        uint32_t page_content = PAGE_CAPACITY - gap_size;
+        // Prevent overflow - if adding would exceed UINT32_MAX, cap at UINT32_MAX
+        if (total_size > UINT32_MAX - page_content) {
+            total_size = UINT32_MAX;
+            break;
+        }
+        total_size += page_content;
+    }
+    
+    // Handle UINT32_MAX as "search to end of buffer"
+    if (stop == UINT32_MAX) {
+        stop = total_size;
+    }
+    
+    // Validate range parameters
+    if (start >= stop || stop > total_size) return (uint32_t)-1;
+    
+    // Early return if start is beyond buffer
+    if (start >= total_size) return (uint32_t)-1;
+    
     uint32_t pi[MAX_SEARCH_QUERY_LEN], j = 0, pos = 0, found = (uint32_t)-1;
     // Build prefix function for KMP
     for (uint32_t i = 1; i < qlen; i++) {
@@ -977,14 +1049,35 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
         if (q[i] == q[j]) j++;
         pi[i] = j;
     }
-    // Scan each page (before and after gap)
+    // Scan each page with optimization to skip irrelevant pages
     for (struct page* p = pgb->head; p; p = p->next) {
+        // Defensive: ensure gap_end >= gap_start to prevent underflow
+        uint32_t gap_size = (p->gap_end >= p->gap_start) ? (p->gap_end - p->gap_start) : 0;
+        uint32_t page_size = PAGE_CAPACITY - gap_size;
+        
+        // Skip pages entirely before the start position
+        if (pos + page_size <= start) {
+            // Increment pos with overflow protection
+            if (pos <= UINT32_MAX - page_size) {
+                pos += page_size;
+            } else {
+                pos = UINT32_MAX;
+            }
+            continue;
+        }
+        
+        // Stop scanning if we've passed the stop position
+        if (pos >= stop) break;
+        
         uint32_t parts[2] = {p->gap_start, PAGE_CAPACITY};
         uint32_t begins[2] = {0, p->gap_end};
         for (int part = 0; part < 2; part++) {
             uint32_t end = parts[part], b = begins[part];
             if (part == 1 && p->gap_end == PAGE_CAPACITY) continue;
-            for (uint32_t k = b; k < end; k++, pos++) {
+            for (uint32_t k = b; k < end; k++) {
+                // Stop processing if we've passed the stop position
+                if (pos >= stop) break;
+                
                 unsigned char c = (unsigned char)p->data[k];
                 while (j && c != (unsigned char)q[j]) j = pi[j - 1];
                 if (c == (unsigned char)q[j]) j++;
@@ -996,6 +1089,8 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                     }
                     j = pi[j - 1];
                 }
+                // Increment pos with overflow protection
+                if (pos < UINT32_MAX) pos++;
             }
         }
     }
@@ -1012,10 +1107,12 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
  */
 void search_find(struct global* global, const char* query)
 {
-    if (query[0] == '\0') {
-        global->search_active = false;
-        global->search_match_count = 0;
-        global->search_query_len = 0;
+    if (!global || !query || query[0] == '\0') {
+        if (global) {
+            global->search_active = false;
+            global->search_match_count = 0;
+            global->search_query_len = 0;
+        }
         return;
     }
 
@@ -1044,7 +1141,7 @@ void search_find(struct global* global, const char* query)
  */
 void search_next(struct global* global)
 {
-    if (!global->search_active || global->search_query[0] == '\0') return;
+    if (!global || !global->search_active || global->search_query[0] == '\0') return;
 
     char* query = global->search_query;
     uint32_t query_len = global->search_query_len;
@@ -1073,7 +1170,7 @@ void search_next(struct global* global)
  */
 void search_prev(struct global* global)
 {
-    if (!global->search_active || global->search_query[0] == '\0') return;
+    if (!global || !global->search_active || global->search_query[0] == '\0') return;
 
     char* query = global->search_query;
     uint32_t prev_pos = search_scan(&global->text, query, global->search_query_len, 0, global->search_pos, true, NULL);
