@@ -1016,6 +1016,21 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                             bool want_last, uint32_t* count)
 {
     if (!pgb || !q || qlen == 0 || qlen > MAX_SEARCH_QUERY_LEN) return (uint32_t)-1;
+    
+    // Calculate total buffer size with overflow protection
+    uint32_t total_size = 0;
+    for (struct page* p = pgb->head; p; p = p->next) {
+        // Defensive: ensure gap_end >= gap_start to prevent underflow
+        uint32_t gap_size = (p->gap_end >= p->gap_start) ? (p->gap_end - p->gap_start) : 0;
+        uint32_t page_content = PAGE_CAPACITY - gap_size;
+        // Prevent overflow - if adding would exceed UINT32_MAX, cap at UINT32_MAX
+        if (total_size > UINT32_MAX - page_content) {
+            total_size = UINT32_MAX;
+            break;
+        }
+        total_size += page_content;
+    }
+    
     if (start >= stop) return (uint32_t)-1;
     
     uint32_t pi[MAX_SEARCH_QUERY_LEN], j = 0, pos = 0, found = (uint32_t)-1;
