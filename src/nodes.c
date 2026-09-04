@@ -1069,7 +1069,10 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
         for (int part = 0; part < 2; part++) {
             uint32_t end = parts[part], b = begins[part];
             if (part == 1 && p->gap_end == PAGE_CAPACITY) continue;
-            for (uint32_t k = b; k < end; k++, pos++) {
+            for (uint32_t k = b; k < end; k++) {
+                // Stop processing if we've passed the stop position
+                if (pos >= stop) break;
+                
                 unsigned char c = (unsigned char)p->data[k];
                 while (j && c != (unsigned char)q[j]) j = pi[j - 1];
                 if (c == (unsigned char)q[j]) j++;
@@ -1081,6 +1084,7 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
                     }
                     j = pi[j - 1];
                 }
+                pos++;
             }
         }
     }
