@@ -1031,7 +1031,16 @@ static uint32_t search_scan(const struct paged_gap_buffer* pgb, const char* q,
         total_size += page_content;
     }
     
-    if (start >= stop) return (uint32_t)-1;
+    // Handle UINT32_MAX as "search to end of buffer"
+    if (stop == UINT32_MAX) {
+        stop = total_size;
+    }
+    
+    // Validate range parameters
+    if (start >= stop || stop > total_size) return (uint32_t)-1;
+    
+    // Early return if start is beyond buffer
+    if (start >= total_size) return (uint32_t)-1;
     
     uint32_t pi[MAX_SEARCH_QUERY_LEN], j = 0, pos = 0, found = (uint32_t)-1;
     // Build prefix function for KMP
