@@ -36,15 +36,16 @@ TEST_FILE_IO_TARGET    = $(BINDIR)/test_file_io
 TEST_SEARCH_TARGET     = $(BINDIR)/test_search
 TEST_SELECTION_TARGET  = $(BINDIR)/test_selection
 TEST_CMD_TARGET        = $(BINDIR)/test_cmd
+TEST_AUTO_INDENT_TARGET = $(BINDIR)/test_auto_indent
 
-TEST_C_SRCS = tests/test_undo.c tests/test_enhanced_undo.c tests/test_large_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c tests/test_file_io.c tests/test_search.c tests/test_selection.c tests/test_cmd.c
+TEST_C_SRCS = tests/test_undo.c tests/test_enhanced_undo.c tests/test_large_undo.c tests/test_0.2.0.c tests/test_config.c tests/stress_test.c tests/edge_case_test.c tests/test_cursor.c tests/test_file_io.c tests/test_search.c tests/test_selection.c tests/test_cmd.c tests/test_auto_indent.c
 TEST_CPP_SRCS = tests/test_cpp_bridge.cpp
 TEST_C_OBJS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%.o, $(TEST_C_SRCS))
 TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
 DEPS = $(OBJS:.o=.d) $(TEST_C_OBJS:.o=.d) $(TEST_CPP_OBJS:.o=.d)
 
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd bench-search check help release
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd test-auto-indent bench-search check help release
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -126,6 +127,11 @@ $(TEST_SELECTION_TARGET): $(BUILDDIR)/tests/test_selection.o $(LIB_OBJS)
 
 $(TEST_CMD_TARGET): $(BUILDDIR)/tests/test_cmd.o $(LIB_OBJS)
 	@echo "Linking command test..."
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "Test build complete: $@"
+
+$(TEST_AUTO_INDENT_TARGET): $(BUILDDIR)/tests/test_auto_indent.o $(LIB_OBJS)
+	@echo "Linking auto-indent test..."
 	@$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 	@echo "Test build complete: $@"
 
@@ -226,6 +232,7 @@ help:
 	@echo "  test-search      : Build and run search test only"
 	@echo "  test-selection   : Build and run selection test only"
 	@echo "  test-cmd         : Build and run command test only"
+	@echo "  test-auto-indent : Build and run auto-indent test only"
 	@echo "  clean            : Remove build artifacts"
 	@echo "  format           : Format source with clang-format"
 	@echo "  format-astyle    : Format source with astyle (K&R, 4-space indent)"
@@ -275,8 +282,12 @@ test-cmd: dirs $(TEST_CMD_TARGET)
 	@echo "Running command test..."
 	@$(TEST_CMD_TARGET)
 
+test-auto-indent: dirs $(TEST_AUTO_INDENT_TARGET)
+	@echo "Running auto-indent test..."
+	@$(TEST_AUTO_INDENT_TARGET)
+
 # Run tests
-test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET) $(TEST_FILE_IO_TARGET) $(TEST_SEARCH_TARGET) $(TEST_SELECTION_TARGET) $(TEST_CMD_TARGET)
+test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TARGET) $(TEST_020_TARGET) $(TEST_CONFIG_TARGET) $(TEST_STRESS_TARGET) $(TEST_EDGE_TARGET) $(TEST_CURSOR_TARGET) $(TEST_CPP_BRIDGE_TARGET) $(TEST_FILE_IO_TARGET) $(TEST_SEARCH_TARGET) $(TEST_SELECTION_TARGET) $(TEST_CMD_TARGET) $(TEST_AUTO_INDENT_TARGET)
 	@echo "Running test_undo..."
 	@$(TEST_UNDO_TARGET)
 	@echo "Running test_enhanced_undo..."
@@ -303,3 +314,5 @@ test: dirs $(TEST_UNDO_TARGET) $(TEST_ENHANCED_UNDO_TARGET) $(TEST_LARGE_UNDO_TA
 	@$(TEST_SELECTION_TARGET)
 	@echo "Running test_cmd..."
 	@$(TEST_CMD_TARGET)
+	@echo "Running test_auto_indent..."
+	@$(TEST_AUTO_INDENT_TARGET)
