@@ -89,9 +89,9 @@ static void mouse_click_move(struct global* global, uint32_t screen_col, uint32_
 // ---------------------------------------------------------------------------
 // Auto-indent helper
 // ---------------------------------------------------------------------------
-static void auto_indent(struct global* g)
+static void auto_indent(struct global* g, uint32_t pre_newline_pos)
 {
-    uint32_t cursor = pgb_cursor_pos(&g->text);
+    uint32_t cursor = pre_newline_pos + 1;
     if (cursor < 2) return; // Need at least the newline and one character before it
 
     char buf[buf_capacity];
@@ -127,7 +127,7 @@ static void auto_indent(struct global* g)
     // Insert the indentation at the current cursor position using batch operation
     if (indent_len > 0) {
         pgb_insert_str(&g->text, indent_str, &g->arena);
-        undo_save_batch_insert(g, indent_str, indent_len, cursor);
+        undo_save_batch_insert(g, indent_str, indent_len, pre_newline_pos + 1);
     }
 }
 
@@ -566,7 +566,7 @@ enum result input_update(struct global* global)
             pgb_insert(&global->text, '\n', &global->arena);
             undo_save_insert(global, '\n', pos);
             if (config_get_bool("auto_indent", 1)) {
-                auto_indent(global);
+                auto_indent(global, pos);
             }
         } else if (ch >= 32 || ch == '\t' || ch == '\n') {
             uint32_t pos = pgb_cursor_pos(&global->text);
