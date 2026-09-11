@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define DRAW_STATUS_ROWS 1u
 #define DRAW_FALLBACK_ROWS 24u
 #define DRAW_FALLBACK_COLS 80u
 #define UTF8_MAX_BYTES 4
@@ -90,19 +91,21 @@ static void append_sanitized(RenderBuffer* out, const char* s, size_t len, uint3
 static void draw_line_number(uint32_t line_num)
 {
     if (!config_get_bool("show_line_numbers", 1)) return;
-    
+
     RB_ESC(ANSI_RESET ANSI_LN_COLOR);
     RB_ESC(ANSI_BOLD);
-    
+
+    uint32_t gutter = draw_gutter_width();
+
     char buf[LINE_NUM_BUF_SIZE];
     int n = snprintf(buf, sizeof(buf), "%5u ", (unsigned)(line_num + 1u));
+
     if (n > 0 && n < (int)sizeof(buf)) {
-        uint32_t gutter = draw_gutter_width();
         size_t out = (size_t)n;
         if (out > gutter) out = gutter;
         rb_append(&rb, buf, out);
     }
-    
+
     RB_ESC(ANSI_RESET ANSI_DEFAULT_COLORS);
 }
 
@@ -390,9 +393,10 @@ static void draw_status(struct global* global, uint32_t cols)
                 RB_ESC(ANSI_ACCENT_COLOR);
                 RB_ESC(ANSI_BOLD);
                 uint32_t msg_budget = budget;
+                uint32_t before_msg = msg_budget;
                 append_sanitized(&rb, msg_buf, strlen(msg_buf), &msg_budget);
                 RB_ESC(ANSI_BOLD_OFF);
-                budget -= msg_budget;
+                budget -= (before_msg - msg_budget);
             }
         }
     }
@@ -405,7 +409,9 @@ static void draw_status(struct global* global, uint32_t cols)
             RB_ESC(ANSI_HINT_COLOR);
             RB_ESC(ANSI_DIM);
             uint32_t hints_budget = budget;
+            uint32_t before_hints = hints_budget;
             append_sanitized(&rb, hints, sizeof(hints) - 1, &hints_budget);
+            budget -= (before_hints - hints_budget);
             RB_ESC(ANSI_DIM_OFF);
         }
     }
@@ -421,8 +427,10 @@ void draw_update(struct global* global)
     uint32_t ws_cols = (uint32_t)global->term.ws.ws_col;
     if (ws_rows == 0) ws_rows = DRAW_FALLBACK_ROWS;
     if (ws_cols == 0) ws_cols = DRAW_FALLBACK_COLS;
-    uint32_t rows_text = (ws_rows >= 2u) ? ws_rows - 1u : 1u;
-    
+    uint32_t rows_text = (ws_rows > DRAW_STATUS_ROWS)
+                   ? ws_rows - DRAW_STATUS_ROWS
+                   : 1u;
+
     rb_clear(&rb);
     draw_cursor_home();
     draw_status(global, ws_cols);
