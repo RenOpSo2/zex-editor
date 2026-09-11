@@ -406,7 +406,9 @@ static void draw_status(struct global* global, uint32_t cols)
             RB_ESC(ANSI_HINT_COLOR);
             RB_ESC(ANSI_DIM);
             uint32_t hints_budget = budget;
+            uint32_t before_hints = hints_budget;
             append_sanitized(&rb, hints, sizeof(hints) - 1, &hints_budget);
+            budget -= (before_hints - hints_budget);
             RB_ESC(ANSI_DIM_OFF);
         }
     }
