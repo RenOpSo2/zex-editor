@@ -390,9 +390,10 @@ static void draw_status(struct global* global, uint32_t cols)
                 RB_ESC(ANSI_ACCENT_COLOR);
                 RB_ESC(ANSI_BOLD);
                 uint32_t msg_budget = budget;
+                uint32_t before_msg = msg_budget;
                 append_sanitized(&rb, msg_buf, strlen(msg_buf), &msg_budget);
                 RB_ESC(ANSI_BOLD_OFF);
-                budget -= msg_budget;
+                budget -= (before_msg - msg_budget);
             }
         }
     }
