@@ -44,8 +44,12 @@ TEST_C_OBJS = $(patsubst tests/%.c, $(BUILDDIR)/tests/%.o, $(TEST_C_SRCS))
 TEST_CPP_OBJS = $(patsubst tests/%.cpp, $(BUILDDIR)/tests/%.o, $(TEST_CPP_SRCS))
 DEPS = $(OBJS:.o=.d) $(TEST_C_OBJS:.o=.d) $(TEST_CPP_OBJS:.o=.d)
 
+# Installation Directories
+PREFIX  ?= /usr/local
+BINDIR_INSTALL ?= $(PREFIX)/bin
+
 # Phony targets
-.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd test-auto-indent bench-search check help release
+.PHONY: all clean run format format-astyle dirs test test-stress test-edge test-cursor test-cpp-bridge test-file-io test-search test-selection test-cmd test-auto-indent bench-search check help release install uninstall
 
 bench-search: dirs
 	@$(CC) $(CFLAGS) bench_search.c -o $(BINDIR)/bench_search
@@ -216,11 +220,27 @@ release: clean all test
 	@echo "Binary size: $$(du -h release/zex | cut -f1)"
 	@echo "Release v$(VERSION) complete!"
 
+# Install target
+install: $(TARGET)
+	@echo "Installing $(TARGET) to $(DESTDIR)$(BINDIR_INSTALL)..."
+	@mkdir -p $(DESTDIR)$(BINDIR_INSTALL)
+	@cp -f $(TARGET) $(DESTDIR)$(BINDIR_INSTALL)/zex
+	@chmod 755 $(DESTDIR)$(BINDIR_INSTALL)/zex
+	@echo "Installation complete!"
+
+# Uninstall target
+uninstall:
+	@echo "Uninstalling $(DESTDIR)$(BINDIR_INSTALL)/zex..."
+	@rm -f $(DESTDIR)$(BINDIR_INSTALL)/zex
+	@echo "Uninstall complete!"
+
 # Show help
 help:
 	@echo "Available targets:"
 	@echo "  all              : Build the project (default)"
 	@echo "  run              : Build and run"
+	@echo "  install          : Install binary to $(BINDIR_INSTALL) (PREFIX=$(PREFIX))"
+	@echo "  uninstall        : Remove installed binary from $(BINDIR_INSTALL)"
 	@echo "  test             : Build and run all tests"
 	@echo "  test-stress      : Build and run stress test only"
 	@echo "  test-edge        : Build and run edge case test only"
